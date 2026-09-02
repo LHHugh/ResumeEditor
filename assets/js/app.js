@@ -269,11 +269,63 @@
       '<textarea data-sec="skillList" data-skill="1" rows="5">' + esc(text) + "</textarea></div></div>";
   }
 
+  // 头像卡片：支持本地上传（自动缩放为小图）、移除、隐藏，也兼容直接粘贴图片 URL
+  function buildAvatarEditor() {
+    var L = UI[state.lang];
+    var a = state.data.avatar || {};
+    var name0 = ((state.data.profile && state.data.profile.name) || "?").slice(0, 1);
+    var preview = a.src
+      ? '<img class="av-prev" id="avPrev" src="' + esc(a.src) + '" alt="">'
+      : '<div class="av-prev ph" id="avPrev">' + esc(name0) + "</div>";
+    return '<div class="card"><h3 class="card-h">' + L.avatar + "</h3>" +
+      '<div class="av-edit"><div class="av-prev-wrap">' + preview + "</div>" +
+      '<div class="av-actions">' +
+        '<button class="btn-mini" data-act="avup">上传照片</button>' +
+        '<button class="btn-mini danger" data-act="avrm"' + (a.src ? "" : " disabled") + ">移除照片</button>" +
+        '<label class="f-label">隐藏头像</label>' +
+        '<input type="checkbox" data-sec="avatar" data-field="hidden"' + (a.hidden ? " checked" : "") + ">" +
+      "</div></div>" +
+      '<div class="f"><label class="f-label">头像图片链接（也可直接粘贴 URL）</label>' +
+      '<input type="text" data-sec="avatar" data-field="src" value="' + esc(a.src || "") + '"></div>' +
+      "</div>";
+  }
+
+  // 读取本地图片文件 -> 缩放为小图 -> dataURL（控制体积，便于存入 localStorage）
+  function readAvatarFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 360;
+        var w = img.width, h = img.height;
+        var scale = Math.min(1, max / Math.max(w || 1, h || 1));
+        var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        var url;
+        try {
+          var canvas = document.createElement("canvas");
+          canvas.width = cw; canvas.height = ch;
+          canvas.getContext("2d").drawImage(img, 0, 0, cw, ch);
+          url = canvas.toDataURL("image/jpeg", 0.85);
+        } catch (e) { url = reader.result; }
+        state.data.avatar = state.data.avatar || {};
+        state.data.avatar.src = url;
+        state.data.avatar.hidden = false;
+        buildEditor(); renderPreview(); save();
+      };
+      img.onerror = function () { alert("图片读取失败，请换一张试试"); };
+      img.src = reader.result;
+    };
+    reader.onerror = function () { alert("文件读取失败"); };
+    reader.readAsDataURL(file);
+  }
+
   function buildEditor() {
     var L = UI[state.lang];
     var html = "";
     FORM.forEach(function (sec) {
       if (sec.key === "skillList") { html += buildSkillEditor(); return; }
+      if (sec.key === "avatar") { html += buildAvatarEditor(); return; }
       if (sec.type === "object") {
         html += '<div class="card"><h3 class="card-h">' + (L[sec.key] || sec.key) + "</h3>";
         var obj = state.data[sec] || {};
@@ -322,6 +374,12 @@
     if (!b) return;
     if (b.dataset.act === "add") addItem(b.dataset.sec);
     else if (b.dataset.act === "del") delItem(b.dataset.sec, Number(b.dataset.idx));
+    else if (b.dataset.act === "avup") { var af = document.getElementById("avatarFile"); if (af) af.click(); }
+    else if (b.dataset.act === "avrm") {
+      state.data.avatar = state.data.avatar || {};
+      state.data.avatar.src = ""; state.data.avatar.hidden = true;
+      buildEditor(); renderPreview(); save();
+    }
   }
 
   function afterDataChange() {
@@ -587,6 +645,19 @@
 
     var preview = document.getElementById("preview");
     preview.addEventListener("input", onPreviewInput);
+    preview.addEventListener("click", function (e) {
+      var t = e.target;
+      if (t && t.classList && t.classList.contains("r-avatar")) {
+        var af = document.getElementById("avatarFile");
+        if (af) af.click();
+      }
+    });
+
+    var avatarFile = document.getElementById("avatarFile");
+    if (avatarFile) avatarFile.addEventListener("change", function (e) {
+      if (e.target.files && e.target.files[0]) readAvatarFile(e.target.files[0]);
+      e.target.value = "";
+    });
 
     document.getElementById("tplSelect").addEventListener("change", function (e) {
       state.template = e.target.value; renderPreview(); save();

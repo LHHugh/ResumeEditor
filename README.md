@@ -9,6 +9,7 @@
 - 🎨 自定义**主题色**与**标签色**
 - ✍️ 左侧表单实时编辑，右侧 A4 预览，输入即所见
 - 🖱️ **「直接编辑预览」模式**：开启后简历正文可直接点选修改（所见即所得），与表单双向同步
+- 📷 **头像本地上传**：左侧「头像」卡片可上传本地照片（自动缩放为小图、也可直接粘贴图片 URL），点击预览中的头像也能上传；形状为圆角长方形
 - 💾 内容自动保存到浏览器 `localStorage`，刷新不丢失
 - 📤 导出 `resume.json` / 导入已有的 `resume.json`（兼容 visiky 数据结构）
 - 🖨️ 一键「打印 / PDF」导出（建议打印时选「另存为 PDF」、关闭页眉页脚）
@@ -67,7 +68,7 @@ npx serve resume-site
 3. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **Deploy from a branch**，
    分支选 **main**、目录选 **/ (root)**，保存即可。本仓库已用此方式发布（纯静态，无需构建）。
 4. 稍等 1~2 分钟构建完成，访问 `https://<你的用户名>.github.io/<仓库名>/` 即可。
-   （本仓库线上地址：https://lhhugh.github.io/ResumeEditor/）
+   （本仓库线上地址：**https://lhhugh.github.io/ResumeEditor/**）
 
 > 若使用 **用户页**（仓库名为 `<用户名>.github.io`），站点地址为 `https://<用户名>.github.io/`。
 

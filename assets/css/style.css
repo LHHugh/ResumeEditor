@@ -120,13 +120,13 @@ body {
   line-height: 1.6;
 }
 .r-avatar {
-  width: 96px; height: 96px; border-radius: 50%;
+  width: 100px; height: 124px; border-radius: 14px;
   object-fit: cover; border: 3px solid var(--theme-color); background: #eef1f5;
   display: flex; align-items: center; justify-content: center;
-  font-size: 38px; font-weight: 700; color: var(--theme-color);
+  font-size: 40px; font-weight: 700; color: var(--theme-color);
   flex: 0 0 auto;
 }
-.r-avatar-ph { width: 96px; height: 96px; }
+.r-avatar-ph { width: 100px; height: 124px; }
 .r-name { font-size: 28px; font-weight: 700; color: var(--theme-color); }
 .r-sec-title {
   font-size: 16px; color: var(--theme-color); font-weight: 700;
@@ -154,6 +154,19 @@ body {
   padding: 2px 10px; font-size: 12px;
 }
 
+/* ---------- 头像上传（编辑器） ---------- */
+.av-edit { display: flex; gap: 14px; align-items: flex-start; }
+.av-prev-wrap { flex: 0 0 auto; }
+.av-prev {
+  width: 72px; height: 90px; border-radius: 12px; object-fit: cover;
+  border: 2px dashed #c4ccd6; background: #eef1f5; display: flex;
+  align-items: center; justify-content: center; font-size: 30px;
+  font-weight: 700; color: #8a94a3;
+}
+.av-prev.ph { border-style: dashed; }
+.av-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.av-actions .f-label { margin: 4px 0 0; }
+
 /* ---------- Template 1 (default) ---------- */
 .tpl-1 .r-header {
   display: flex; align-items: center; gap: 22px;
@@ -171,7 +184,7 @@ body {
   padding-bottom: 14px; margin-bottom: 16px;
 }
 .tpl-2 .r-avatar, .tpl-2 .r-avatar-ph {
-  width: 76px; height: 76px; font-size: 30px; margin: 0 auto 10px;
+  width: 74px; height: 92px; font-size: 30px; margin: 0 auto 10px; border-radius: 12px;
 }
 .tpl-2 .r-name { font-size: 24px; }
 .tpl-2 .r-contact { justify-content: center; margin-top: 8px; }
@@ -192,7 +205,7 @@ body {
   padding: 36px 24px; flex: 0 0 290px;
 }
 .tpl-3 .r-side .r-avatar, .tpl-3 .r-side .r-avatar-ph {
-  width: 116px; height: 116px; font-size: 40px; border: 3px solid #fff;
+  width: 110px; height: 136px; font-size: 44px; border: 3px solid #fff; border-radius: 14px;
   margin: 0 auto 14px; color: #fff; background: rgba(255, 255, 255, .15);
 }
 .tpl-3 .r-side .side-name {
