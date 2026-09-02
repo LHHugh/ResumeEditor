@@ -4,7 +4,21 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "resume-maker-v1";
+  var STORAGE_KEY = "resume-maker-v1"; // 旧版匿名键（仅用于迁移）
+  var ACCOUNTS_KEY = "resume_accounts_v1";
+  var SESSION_KEY = "resume_session_v1";
+  function dataKey(user) { return "resume_data_v1__" + (user || ""); }
+  function getAccounts() {
+    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveAccounts(a) {
+    try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); } catch (e) {}
+  }
+  function currentUser() { return localStorage.getItem(SESSION_KEY) || ""; }
+  function setSession(u) {
+    try { u ? localStorage.setItem(SESSION_KEY, u) : localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
 
   /* ---------- 默认示例数据 ---------- */
   var DEFAULT_DATA = {
@@ -559,10 +573,12 @@
     save();
   }
 
-  /* ---------- 持久化 ---------- */
+  /* ---------- 持久化（按账号命名空间隔离） ---------- */
   function save() {
+    var u = currentUser();
+    if (!u) return; // 未登录不写入，避免覆盖他人数据
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      localStorage.setItem(dataKey(u), JSON.stringify({
         data: state.data, template: state.template, lang: state.lang, inline: state.inline
       }));
       flashSaved();
@@ -574,9 +590,12 @@
     h.textContent = "已自动保存 " + new Date().toLocaleTimeString();
   }
   function load() {
+    var u = currentUser();
+    if (!u) return;
+    var raw = localStorage.getItem(dataKey(u));
+    if (!raw) { migrateOld(u); raw = localStorage.getItem(dataKey(u)); }
+    if (!raw) return;
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
       var parsed = JSON.parse(raw);
       if (parsed.data) {
         var d = clone(DEFAULT_DATA);
@@ -587,6 +606,14 @@
       if (parsed.lang) state.lang = parsed.lang;
       if (typeof parsed.inline === "boolean") state.inline = parsed.inline;
     } catch (e) { /* 忽略损坏数据 */ }
+  }
+  // 首个账号注册时，把旧的匿名数据迁移进该账号，避免丢失
+  function migrateOld(u) {
+    var old = null;
+    try { old = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    if (old) {
+      try { localStorage.setItem(dataKey(u), old); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    }
   }
 
   /* ---------- 工具栏动作 ---------- */
@@ -630,14 +657,125 @@
     }
   }
 
+  /* ---------- 账号 / 登录系统（纯前端，数据按账号隔离） ---------- */
+  function sha256(str) {
+    try {
+      if (globalThis.crypto && globalThis.crypto.subtle && globalThis.crypto.subtle.digest) {
+        return globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str))
+          .then(function (buf) {
+            return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+              return ("0" + b.toString(16)).slice(-2);
+            }).join("");
+          });
+      }
+    } catch (e) {}
+    // 非安全上下文兜底（仅本地调试用，非加密强度）
+    var h = 0; for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; }
+    return Promise.resolve("fb_" + h.toString(16));
+  }
+  function randomSalt() {
+    try {
+      var a = new Uint8Array(8); globalThis.crypto.getRandomValues(a);
+      return Array.prototype.map.call(a, function (b) { return b.toString(16); }).join("");
+    } catch (e) { return String(Math.random()).slice(2); }
+  }
+  function showLogin() {
+    var ov = document.getElementById("loginOverlay");
+    if (ov) ov.classList.remove("hidden");
+    var app = document.getElementById("appRoot");
+    if (app) app.classList.add("locked");
+    var ua = document.getElementById("userArea");
+    if (ua) ua.classList.add("hidden");
+  }
+  function hideLogin() {
+    var ov = document.getElementById("loginOverlay");
+    if (ov) ov.classList.add("hidden");
+    var app = document.getElementById("appRoot");
+    if (app) app.classList.remove("locked");
+    var ua = document.getElementById("userArea");
+    if (ua) {
+      ua.classList.remove("hidden");
+      var lbl = document.getElementById("userLabel");
+      if (lbl) lbl.textContent = currentUser();
+    }
+  }
+  function enterApp(user) {
+    setSession(user);
+    load();
+    buildEditor(); renderPreview(); syncToolbar();
+    hideLogin();
+  }
+  function logout() {
+    setSession("");
+    var ed = document.getElementById("editor"); if (ed) ed.innerHTML = "";
+    var pv = document.getElementById("preview"); if (pv) pv.innerHTML = "";
+    showLogin();
+  }
+  function setLoginError(msg) {
+    var e = document.getElementById("loginError");
+    if (e) e.textContent = msg || "";
+  }
+  function setMode(register) {
+    var ov = document.getElementById("loginOverlay");
+    if (ov) ov.classList.toggle("mode-register", !!register);
+    var title = document.getElementById("loginTitle");
+    var submit = document.getElementById("loginSubmit");
+    var toggle = document.getElementById("loginRegister");
+    if (title) title.textContent = register ? "注册新账号" : "登录简历编辑器";
+    if (submit) submit.textContent = register ? "注册并进入" : "登录";
+    if (toggle) toggle.textContent = register ? "已有账号？去登录" : "注册新账号";
+    setLoginError("");
+  }
+  async function doRegister() {
+    var user = (document.getElementById("loginUser").value || "").trim();
+    var pw = document.getElementById("loginPw").value || "";
+    if (!user) { setLoginError("请输入用户名"); return; }
+    if (/\s/.test(user)) { setLoginError("用户名不能包含空格"); return; }
+    if (pw.length < 4) { setLoginError("密码至少 4 位"); return; }
+    var acc = getAccounts();
+    if (acc[user]) { setLoginError("该用户名已存在，请直接登录"); return; }
+    var firstAccount = Object.keys(acc).length === 0;
+    var salt = randomSalt();
+    var hash = await sha256(pw + salt);
+    acc[user] = { salt: salt, pw: hash };
+    saveAccounts(acc);
+    if (firstAccount) migrateOld(user);
+    enterApp(user);
+  }
+  async function doLogin() {
+    var user = (document.getElementById("loginUser").value || "").trim();
+    var pw = document.getElementById("loginPw").value || "";
+    var acc = getAccounts();
+    if (!acc[user]) { setLoginError("用户名不存在，请先注册"); return; }
+    var hash = await sha256(pw + acc[user].salt);
+    if (hash !== acc[user].pw) { setLoginError("密码错误"); return; }
+    enterApp(user);
+  }
+
+  /* ---------- 赞助系统（非强制弹窗） ---------- */
+  var SPONSOR = {
+    enabled: true,
+    // 替换为你的支付宝收款码图片（如 assets/img/alipay-qr.png）
+    qr: "assets/img/alipay-qr.svg",
+    title: "如果这个工具帮到了你 💛",
+    text: "制作简历免费、无广告。如果愿意，可以请作者喝杯咖啡～ 赞助完全自愿，不影响任何功能。"
+  };
+  function openSponsor() {
+    if (!SPONSOR.enabled) return;
+    var m = document.getElementById("sponsorModal");
+    var img = document.getElementById("sponsorImg");
+    var t = document.getElementById("sponsorTitle");
+    if (t) t.textContent = SPONSOR.title;
+    if (img) img.src = SPONSOR.qr;
+    if (m) m.classList.remove("hidden");
+  }
+  function closeSponsor() {
+    var m = document.getElementById("sponsorModal");
+    if (m) m.classList.add("hidden");
+  }
+
   /* ---------- 初始化 ---------- */
   function init() {
-    load();
-    buildEditor();
-    renderPreview();
-    syncToolbar();
-    save();
-
     var editor = document.getElementById("editor");
     editor.addEventListener("input", onEditorInput);
     editor.addEventListener("change", onEditorInput);
@@ -673,7 +811,13 @@
       save();
     });
     document.getElementById("exportBtn").addEventListener("click", exportJSON);
-    document.getElementById("printBtn").addEventListener("click", function () { window.print(); });
+    document.getElementById("printBtn").addEventListener("click", function () {
+      window.print();
+      if (SPONSOR.enabled && !sessionStorage.getItem("sponsorShown")) {
+        sessionStorage.setItem("sponsorShown", "1");
+        openSponsor();
+      }
+    });
     document.getElementById("resetBtn").addEventListener("click", resetAll);
     document.getElementById("importBtn").addEventListener("click", function () {
       document.getElementById("importFile").click();
@@ -682,6 +826,33 @@
       if (e.target.files && e.target.files[0]) importJSON(e.target.files[0]);
       e.target.value = "";
     });
+
+    // 登录系统事件
+    var submit = document.getElementById("loginSubmit");
+    if (submit) submit.addEventListener("click", function () {
+      var reg = document.getElementById("loginOverlay").classList.contains("mode-register");
+      if (reg) doRegister(); else doLogin();
+    });
+    var reg = document.getElementById("loginRegister");
+    if (reg) reg.addEventListener("click", function () {
+      var isReg = document.getElementById("loginOverlay").classList.contains("mode-register");
+      setMode(!isReg);
+    });
+    var lo = document.getElementById("logoutBtn");
+    if (lo) lo.addEventListener("click", logout);
+    var sb = document.getElementById("sponsorBtn");
+    if (sb) sb.addEventListener("click", openSponsor);
+    var sc = document.getElementById("sponsorClose");
+    if (sc) sc.addEventListener("click", closeSponsor);
+    var sc2 = document.getElementById("sponsorClose2");
+    if (sc2) sc2.addEventListener("click", closeSponsor);
+    var sd = document.getElementById("sponsorDone");
+    if (sd) sd.addEventListener("click", closeSponsor);
+
+    // 进入判断：已登录且账号存在则直接进入，否则显示登录遮罩
+    var u = currentUser();
+    if (u && getAccounts()[u]) { enterApp(u); }
+    else { showLogin(); }
   }
 
   if (document.readyState === "loading") {
