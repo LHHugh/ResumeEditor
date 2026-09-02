@@ -1,5 +1,6 @@
 /* 在线简历编辑器 — 零依赖纯静态实现
- * 数据模型兼容 visiky/resume 的 resume.json 结构。 */
+ * 数据模型兼容 visiky/resume 的 resume.json 结构。
+ * 支持两种编辑方式：左侧表单、以及「直接编辑预览」（所见即所得）。 */
 (function () {
   "use strict";
 
@@ -134,7 +135,7 @@
   };
 
   /* ---------- 状态 ---------- */
-  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh" };
+  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh", inline: false };
 
   /* ---------- 工具函数 ---------- */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -159,6 +160,22 @@
     return "--theme-color:" + (th.color || "#2f5785") +
       ";--tag-color:" + (th.tagColor || "#8bc34a");
   }
+  function bind(path) { return ' data-bind="' + path + '"'; }
+  function isTimeField(f) { return f === "edu_time" || f === "work_time"; }
+  function parseTime(str) {
+    str = String(str == null ? "" : str).trim();
+    if (!str) return ["", ""];
+    var start, end;
+    var i = str.indexOf(" - ");
+    if (i >= 0) { start = str.slice(0, i).trim(); end = str.slice(i + 3).trim(); }
+    else {
+      var j = str.indexOf("-");
+      if (j >= 0) { start = str.slice(0, j).trim(); end = str.slice(j + 1).trim(); }
+      else { start = str; end = ""; }
+    }
+    if (end === "至今" || end === "present" || end === "Present") end = null;
+    return [start, end];
+  }
 
   /* ---------- 数据写入 ---------- */
   function setPath(sec, idx, field, sub, value) {
@@ -177,6 +194,31 @@
       d[sec][idx][field] = value;
     }
   }
+
+  // 行内编辑：按 data-bind 路径写回数据
+  function setByPath(path, value) {
+    var p = path.split(".");
+    if (p[0] === "skillList" && p.length === 3) {
+      var i = Number(p[1]);
+      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
+      state.data.skillList[i] = value;
+      return;
+    }
+    if (p.length === 2) {
+      var sec = p[0], field = p[1];
+      if (!state.data[sec] || typeof state.data[sec] !== "object") state.data[sec] = {};
+      state.data[sec][field] = isTimeField(field) ? parseTime(value) : value;
+      return;
+    }
+    if (p.length === 3) {
+      var s3 = p[0], idx = Number(p[1]), f3 = p[2];
+      if (!Array.isArray(state.data[s3])) state.data[s3] = [];
+      if (!state.data[s3][idx]) state.data[s3][idx] = {};
+      state.data[s3][idx][f3] = isTimeField(f3) ? parseTime(value) : value;
+      return;
+    }
+  }
+
   function addItem(sec) {
     var cfg = FORM.find(function (s) { return s.key === sec; });
     var obj = {};
@@ -288,20 +330,23 @@
   }
 
   /* ---------- 预览渲染 ---------- */
-  function contactsHTML(mode) {
+  function contactsItems() {
     var p = state.data.profile || {};
-    var items = [];
-    if (p.mobile) items.push(["手机", p.mobile]);
-    if (p.email) items.push(["邮箱", p.email]);
-    if (p.github) items.push(["GitHub", p.github]);
-    if (p.zhihu) items.push(["知乎", p.zhihu]);
-    if (p.workExpYear) items.push(["工作年限", p.workExpYear]);
+    var defs = [["mobile", "手机"], ["email", "邮箱"], ["github", "GitHub"], ["zhihu", "知乎"], ["workExpYear", "工作年限"]];
+    var arr = [];
+    defs.forEach(function (d) { if (p[d[0]]) arr.push({ key: d[0], label: d[1], value: p[d[0]] }); });
+    return arr;
+  }
+  function contactsHTML(mode) {
+    var items = contactsItems();
     if (mode === "chip") {
-      return items.map(function (it) { return '<span class="chip">' + esc(it[1]) + "</span>"; }).join("");
+      return items.map(function (it) {
+        return '<span class="chip"' + bind("profile." + it.key) + ">" + esc(it.value) + "</span>";
+      }).join("");
     }
     return items.map(function (it) {
-      return '<div class="side-contact"><span class="sc-k">' + esc(it[0]) +
-        '</span><span class="sc-v">' + esc(it[1]) + "</span></div>";
+      return '<div class="side-contact"><span class="sc-k">' + esc(it.label) + "</span>" +
+        '<span class="sc-v"' + bind("profile." + it.key) + ">" + esc(it.value) + "</span></div>";
     }).join("");
   }
 
@@ -317,61 +362,63 @@
   function headerHTML() {
     var p = state.data.profile || {};
     return avatarHTML() +
-      '<div class="r-head-info"><div class="r-name">' + esc(p.name || "") +
+      '<div class="r-head-info"><div class="r-name"' + bind("profile.name") + ">" + esc(p.name || "") +
       '</div><div class="r-contact">' + contactsHTML("chip") + "</div></div>";
   }
 
   function block(key, fb, inner) {
     if (!inner) return "";
-    return '<section class="r-section"><h2 class="r-sec-title">' + esc(T(key, fb)) +
-      "</h2>" + inner + "</section>";
+    return '<section class="r-section"><h2 class="r-sec-title"' + bind("titleNameMap." + key) +
+      ">" + esc(T(key, fb)) + "</h2>" + inner + "</section>";
   }
 
   function eduInner() {
     var list = state.data.educationList || [];
     if (!list.length) return "";
-    return '<ul class="r-list">' + list.map(function (e) {
+    return '<ul class="r-list">' + list.map(function (e, i) {
       var time = fmtRange(e.edu_time);
-      var sub = [e.major, e.academic_degree].filter(Boolean).map(esc).join(" · ");
+      var parts = [];
+      if (e.major) parts.push('<span' + bind("educationList." + i + ".major") + ">" + esc(e.major) + "</span>");
+      if (e.academic_degree) parts.push('<span' + bind("educationList." + i + ".academic_degree") + ">" + esc(e.academic_degree) + "</span>");
       return "<li>" +
-        '<div class="r-row"><span class="r-strong">' + esc(e.school || "") + "</span>" +
-        (time ? '<span class="r-time">' + esc(time) + "</span>" : "") + "</div>" +
-        (sub ? '<div class="r-sub">' + sub + "</div>" : "") + "</li>";
+        '<div class="r-row"><span class="r-strong"' + bind("educationList." + i + ".school") + ">" + esc(e.school || "") + "</span>" +
+        (time ? '<span class="r-time"' + bind("educationList." + i + ".edu_time") + ">" + esc(time) + "</span>" : "") + "</div>" +
+        (parts.length ? '<div class="r-sub">' + parts.join(" · ") + "</div>" : "") + "</li>";
     }).join("") + "</ul>";
   }
 
   function workInner() {
     var list = state.data.workExpList || [];
     if (!list.length) return "";
-    return '<ul class="r-list">' + list.map(function (w) {
+    return '<ul class="r-list">' + list.map(function (w, i) {
       var time = fmtRange(w.work_time);
       var dep = w.department_name ? ' <span class="r-dim">· ' + esc(w.department_name) + "</span>" : "";
       return "<li>" +
-        '<div class="r-row"><span class="r-strong">' + esc(w.company_name || "") + dep + "</span>" +
-        (time ? '<span class="r-time">' + esc(time) + "</span>" : "") + "</div>" +
-        (w.work_desc ? '<div class="r-desc">' + ml(w.work_desc) + "</div>" : "") + "</li>";
+        '<div class="r-row"><span class="r-strong"' + bind("workExpList." + i + ".company_name") + ">" + esc(w.company_name || "") + dep + "</span>" +
+        (time ? '<span class="r-time"' + bind("workExpList." + i + ".work_time") + ">" + esc(time) + "</span>" : "") + "</div>" +
+        (w.work_desc ? '<div class="r-desc"' + bind("workExpList." + i + ".work_desc") + ">" + ml(w.work_desc) + "</div>" : "") + "</li>";
     }).join("") + "</ul>";
   }
 
   function projectInner() {
     var list = state.data.projectList || [];
     if (!list.length) return "";
-    return '<ul class="r-list">' + list.map(function (p) {
+    return '<ul class="r-list">' + list.map(function (p, i) {
       return "<li>" +
-        '<div class="r-row"><span class="r-strong">' + esc(p.project_name || "") + "</span>" +
-        (p.project_time ? '<span class="r-time">' + esc(p.project_time) + "</span>" : "") + "</div>" +
-        (p.project_role ? '<div class="r-sub">' + esc(p.project_role) + "</div>" : "") +
-        (p.project_desc ? '<div class="r-desc">' + ml(p.project_desc) + "</div>" : "") +
-        (p.project_content ? '<div class="r-desc">' + ml(p.project_content) + "</div>" : "") + "</li>";
+        '<div class="r-row"><span class="r-strong"' + bind("projectList." + i + ".project_name") + ">" + esc(p.project_name || "") + "</span>" +
+        (p.project_time ? '<span class="r-time"' + bind("projectList." + i + ".project_time") + ">" + esc(p.project_time) + "</span>" : "") + "</div>" +
+        (p.project_role ? '<div class="r-sub"' + bind("projectList." + i + ".project_role") + ">" + esc(p.project_role) + "</div>" : "") +
+        (p.project_desc ? '<div class="r-desc"' + bind("projectList." + i + ".project_desc") + ">" + ml(p.project_desc) + "</div>" : "") +
+        (p.project_content ? '<div class="r-desc"' + bind("projectList." + i + ".project_content") + ">" + ml(p.project_content) + "</div>" : "") + "</li>";
     }).join("") + "</ul>";
   }
 
   function skillInner() {
     var list = state.data.skillList || [];
     if (!list.length) return "";
-    var tags = list.map(function (s) {
+    var tags = list.map(function (s, i) {
       var t = (typeof s === "object") ? (s.skill || s.skill_name || "") : s;
-      return '<span class="tag">' + esc(t) + "</span>";
+      return '<span class="tag"' + bind("skillList." + i) + ">" + esc(t) + "</span>";
     }).join("");
     return '<div class="tags">' + tags + "</div>";
   }
@@ -379,28 +426,28 @@
   function awardInner() {
     var list = state.data.awardList || [];
     if (!list.length) return "";
-    return '<ul class="r-list">' + list.map(function (a) {
+    return '<ul class="r-list">' + list.map(function (a, i) {
       return "<li>" +
-        '<div class="r-row"><span>' + esc(a.award_info || "") + "</span>" +
-        (a.award_time ? '<span class="r-time">' + esc(a.award_time) + "</span>" : "") + "</div></li>";
+        '<div class="r-row"><span' + bind("awardList." + i + ".award_info") + ">" + esc(a.award_info || "") + "</span>" +
+        (a.award_time ? '<span class="r-time"' + bind("awardList." + i + ".award_time") + ">" + esc(a.award_time) + "</span>" : "") + "</div></li>";
     }).join("") + "</ul>";
   }
 
   function workListInner() {
     var list = state.data.workList || [];
     if (!list.length) return "";
-    return '<ul class="r-list">' + list.map(function (w) {
+    return '<ul class="r-list">' + list.map(function (w, i) {
       var link = w.work_link ? ' <a class="r-link" href="' + esc(w.work_link) +
-        '" target="_blank">' + esc(w.work_link) + "</a>" : "";
+        '" target="_blank"' + bind("workList." + i + ".work_link") + ">" + esc(w.work_link) + "</a>" : "";
       return "<li>" +
-        '<div class="r-row"><span class="r-strong">' + esc(w.work_name || "") + "</span>" + link + "</div>" +
-        (w.work_desc ? '<div class="r-desc">' + esc(w.work_desc) + "</div>" : "") + "</li>";
+        '<div class="r-row"><span class="r-strong"' + bind("workList." + i + ".work_name") + ">" + esc(w.work_name || "") + "</span>" + link + "</div>" +
+        (w.work_desc ? '<div class="r-desc"' + bind("workList." + i + ".work_desc") + ">" + esc(w.work_desc) + "</div>" : "") + "</li>";
     }).join("") + "</ul>";
   }
 
   function aboutInner() {
     var a = state.data.aboutme || {};
-    return a.aboutme_desc ? '<div class="r-about">' + ml(a.aboutme_desc) + "</div>" : "";
+    return a.aboutme_desc ? '<div class="r-about"' + bind("aboutme.aboutme_desc") + ">" + ml(a.aboutme_desc) + "</div>" : "";
   }
 
   function renderPreview() {
@@ -416,7 +463,7 @@
     if (state.template === "tpl-3") {
       html = '<div class="resume tpl-3" style="' + themeVars() + '">' +
         '<aside class="r-side">' + avatarHTML("side") +
-        '<div class="side-name">' + esc((d.profile || {}).name || "") + "</div>" +
+        '<div class="side-name"' + bind("profile.name") + ">" + esc((d.profile || {}).name || "") + "</div>" +
         '<div class="side-contacts">' + contactsHTML("list") + "</div>" +
         skillB + awardB + "</aside>" +
         '<div class="r-main">' + eduB + workB + projB + aboutB + workListB + "</div></div>";
@@ -426,13 +473,39 @@
         eduB + workB + projB + skillB + awardB + workListB + aboutB + "</div>";
     }
     document.getElementById("preview").innerHTML = html;
+    applyInline();
+  }
+
+  // 行内编辑：开启时把带 data-bind 的元素设为可编辑
+  function applyInline() {
+    var prev = document.getElementById("preview");
+    if (!prev) return;
+    if (state.inline) {
+      prev.classList.add("inline-on");
+      var nodes = prev.querySelectorAll("[data-bind]");
+      for (var n = 0; n < nodes.length; n++) nodes[n].setAttribute("contenteditable", "true");
+    } else {
+      prev.classList.remove("inline-on");
+      var ed = prev.querySelectorAll('[contenteditable="true"]');
+      for (var k = 0; k < ed.length; k++) ed[k].removeAttribute("contenteditable");
+    }
+  }
+
+  function onPreviewInput(e) {
+    if (!state.inline) return;
+    var el = e.target;
+    var path = el && el.getAttribute ? el.getAttribute("data-bind") : null;
+    if (!path) return;
+    var val = (el.innerText != null) ? el.innerText : el.textContent;
+    setByPath(path, val);
+    save();
   }
 
   /* ---------- 持久化 ---------- */
   function save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        data: state.data, template: state.template, lang: state.lang
+        data: state.data, template: state.template, lang: state.lang, inline: state.inline
       }));
       flashSaved();
     } catch (e) { /* 忽略存储异常 */ }
@@ -454,6 +527,7 @@
       }
       if (parsed.template) state.template = parsed.template;
       if (parsed.lang) state.lang = parsed.lang;
+      if (typeof parsed.inline === "boolean") state.inline = parsed.inline;
     } catch (e) { /* 忽略损坏数据 */ }
   }
 
@@ -475,8 +549,8 @@
         Object.keys(obj).forEach(function (k) { d[k] = obj[k]; });
         state.data = d;
         state.template = "tpl-1";
-        buildEditor(); renderPreview(); save();
-        syncToolbar();
+        state.inline = false;
+        buildEditor(); renderPreview(); save(); syncToolbar();
       } catch (err) {
         alert("JSON 解析失败：" + err.message);
       }
@@ -491,6 +565,11 @@
   function syncToolbar() {
     document.getElementById("tplSelect").value = state.template;
     document.getElementById("langSelect").value = state.lang;
+    var ib = document.getElementById("inlineBtn");
+    if (ib) {
+      ib.textContent = state.inline ? "完成编辑" : "直接编辑预览";
+      ib.classList.toggle("active", state.inline);
+    }
   }
 
   /* ---------- 初始化 ---------- */
@@ -506,11 +585,21 @@
     editor.addEventListener("change", onEditorInput);
     editor.addEventListener("click", onEditorClick);
 
+    var preview = document.getElementById("preview");
+    preview.addEventListener("input", onPreviewInput);
+
     document.getElementById("tplSelect").addEventListener("change", function (e) {
       state.template = e.target.value; renderPreview(); save();
     });
     document.getElementById("langSelect").addEventListener("change", function (e) {
       state.lang = e.target.value; buildEditor(); renderPreview(); save();
+    });
+    document.getElementById("inlineBtn").addEventListener("click", function () {
+      state.inline = !state.inline;
+      applyInline();
+      this.textContent = state.inline ? "完成编辑" : "直接编辑预览";
+      this.classList.toggle("active", state.inline);
+      save();
     });
     document.getElementById("exportBtn").addEventListener("click", exportJSON);
     document.getElementById("printBtn").addEventListener("click", function () { window.print(); });

@@ -216,6 +216,20 @@ body {
   padding-left: 10px; display: block;
 }
 
+/* ---------- 行内编辑（直接编辑预览） ---------- */
+.btn.active { background: #16a34a; }
+.btn.active:hover { background: #15803d; }
+.resume.inline-on [contenteditable="true"] {
+  cursor: text; border-radius: 3px; transition: background .12s;
+}
+.resume.inline-on [contenteditable="true"]:hover {
+  background: rgba(59, 130, 246, .08);
+}
+.resume.inline-on [contenteditable="true"]:focus {
+  outline: 2px dashed var(--theme-color); outline-offset: 2px;
+  background: rgba(59, 130, 246, .12);
+}
+
 /* ---------- Print ---------- */
 @media print {
   .toolbar, .editor { display: none !important; }
