@@ -1,0 +1,50 @@
+{
+  "titleNameMap": {
+    "educationList": "教育背景",
+    "workExpList": "工作经历",
+    "projectList": "项目经验",
+    "skillList": "个人技能",
+    "awardList": "更多信息",
+    "workList": "个人作品",
+    "aboutme": "个人评价"
+  },
+  "avatar": { "src": "", "hidden": false },
+  "profile": {
+    "name": "你的名字",
+    "email": "you@example.com",
+    "mobile": "138xxxx8888",
+    "github": "https://github.com/yourname",
+    "zhihu": "",
+    "workExpYear": "3 年"
+  },
+  "educationList": [
+    {
+      "edu_time": ["2016.09", "2020.06"],
+      "school": "某某大学",
+      "major": "计算机科学与技术",
+      "academic_degree": "本科"
+    }
+  ],
+  "workExpList": [
+    {
+      "company_name": "某某科技有限公司",
+      "department_name": "研发部",
+      "work_time": ["2020.07", null],
+      "work_desc": "1. 负责核心业务系统开发\n2. 参与架构设计与性能优化"
+    }
+  ],
+  "projectList": [
+    {
+      "project_name": "示例项目",
+      "project_role": "后端负责人",
+      "project_time": "2021.01 - 2022.06",
+      "project_desc": "项目简介：支撑日均百万级请求的核心服务。",
+      "project_content": "1. 主导模块设计\n2. 提升系统稳定性与吞吐"
+    }
+  ],
+  "skillList": ["JavaScript", "React", "Node.js", "Python", "MySQL"],
+  "awardList": [{ "award_info": "年度优秀员工", "award_time": "2022" }],
+  "workList": [],
+  "aboutme": { "aboutme_desc": "🌱 3 年开发经验，专注 Web 全栈，爱好开源。" },
+  "theme": { "color": "#2f5785", "tagColor": "#8bc34a" }
+}

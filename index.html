@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>在线简历编辑器 · Resume Maker</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <div class="toolbar">
+    <div class="tb-left">
+      <span class="logo">📄 在线简历编辑器</span>
+    </div>
+    <div class="tb-right">
+      <label class="tb-field">模板
+        <select id="tplSelect">
+          <option value="tpl-1">默认模板</option>
+          <option value="tpl-2">简易模板</option>
+          <option value="tpl-3">侧边栏模板</option>
+        </select>
+      </label>
+      <label class="tb-field">语言
+        <select id="langSelect">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <button class="btn" id="exportBtn">导出 JSON</button>
+      <button class="btn" id="importBtn">导入 JSON</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
+      <button class="btn" id="printBtn">打印 / PDF</button>
+      <button class="btn ghost" id="resetBtn">重置</button>
+      <span class="save-hint" id="saveHint">已自动保存</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="editor" id="editor"><!-- 表单由 app.js 动态生成 --></div>
+    <div class="preview-wrap">
+      <div class="preview" id="preview"><!-- 简历预览由 app.js 动态生成 --></div>
+    </div>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
