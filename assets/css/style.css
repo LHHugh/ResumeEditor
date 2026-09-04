@@ -120,13 +120,13 @@ body {
   line-height: 1.6;
 }
 .r-avatar {
-  width: 100px; height: 124px; border-radius: 14px;
+  width: 112px; height: 140px; border-radius: 14px;
   object-fit: cover; border: 3px solid var(--theme-color); background: #eef1f5;
   display: flex; align-items: center; justify-content: center;
-  font-size: 40px; font-weight: 700; color: var(--theme-color);
+  font-size: 46px; font-weight: 700; color: var(--theme-color);
   flex: 0 0 auto;
 }
-.r-avatar-ph { width: 100px; height: 124px; }
+.r-avatar-ph { width: 112px; height: 140px; }
 .r-name { font-size: 28px; font-weight: 700; color: var(--theme-color); }
 .r-sec-title {
   font-size: 16px; color: var(--theme-color); font-weight: 700;
@@ -175,14 +175,29 @@ body {
   background: #fff; border: 1px solid #d7dde5; border-radius: 6px;
   padding: 5px 8px; font-size: 13px; color: #222;
 }
+.sec-add-row input[type="text"] {
+  flex: 1; min-width: 0; border: 1px solid #d7dde5; border-radius: 6px;
+  padding: 6px 8px; font-size: 13px; font-family: inherit; color: #222;
+}
+.sec-add-row input[type="text"]:focus { outline: none; border-color: #3b82f6; }
+.sec-group-title {
+  font-size: 13px; font-weight: 700; color: #3b5bdb;
+  margin: 6px 0 2px; padding-top: 6px; border-top: 1px dashed #e6eaf0;
+}
+.card-sub-edit { margin-bottom: 8px; }
+.card-sub-edit input {
+  width: 100%; border: 1px solid #d7dde5; border-radius: 6px;
+  padding: 6px 8px; font-size: 13px; font-family: inherit; color: #222;
+}
+.card-sub-edit input:focus { outline: none; border-color: #3b82f6; }
 
 /* ---------- 头像上传（编辑器） ---------- */
 .av-edit { display: flex; gap: 14px; align-items: flex-start; }
 .av-prev-wrap { flex: 0 0 auto; }
 .av-prev {
-  width: 72px; height: 90px; border-radius: 12px; object-fit: cover;
+  width: 84px; height: 104px; border-radius: 12px; object-fit: cover;
   border: 2px dashed #c4ccd6; background: #eef1f5; display: flex;
-  align-items: center; justify-content: center; font-size: 30px;
+  align-items: center; justify-content: center; font-size: 34px;
   font-weight: 700; color: #8a94a3;
 }
 .av-prev.ph { border-style: dashed; }
@@ -206,7 +221,7 @@ body {
   padding-bottom: 14px; margin-bottom: 16px;
 }
 .tpl-2 .r-avatar, .tpl-2 .r-avatar-ph {
-  width: 74px; height: 92px; font-size: 30px; margin: 0 auto 10px; border-radius: 12px;
+  width: 86px; height: 106px; font-size: 36px; margin: 0 auto 10px; border-radius: 12px;
 }
 .tpl-2 .r-name { font-size: 24px; }
 .tpl-2 .r-contact { justify-content: center; margin-top: 8px; }
@@ -227,7 +242,7 @@ body {
   padding: 36px 24px; flex: 0 0 290px;
 }
 .tpl-3 .r-side .r-avatar, .tpl-3 .r-side .r-avatar-ph {
-  width: 110px; height: 136px; font-size: 44px; border: 3px solid #fff; border-radius: 14px;
+  width: 120px; height: 150px; font-size: 50px; border: 3px solid #fff; border-radius: 14px;
   margin: 0 auto 14px; color: #fff; background: rgba(255, 255, 255, .15);
 }
 .tpl-3 .r-side .side-name {

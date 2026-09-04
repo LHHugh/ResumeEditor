@@ -14,6 +14,8 @@
 - 📤 导出 `resume.json` / 导入已有的 `resume.json`（兼容 visiky 数据结构）
 - 🖨️ 一键「打印 / PDF」导出：按 A4（210 mm × 297 mm）全幅输出，无浏览器默认白边
 - 🧩 **模块可增减**：左侧「模块管理」可自由添加 / 删除「教育背景、工作经历、项目经验、个人技能、更多信息、个人作品、个人评价」等大模块
+- ➕ **自定义模块**：在「模块管理」里输入名称即可新增任意模块（内部结构沿用「更多信息」格式：内容 + 时间）；也支持在**侧边栏模板**里单独增删「侧边栏模块」
+- 📇 **基本信息可增删改**：「基本信息」卡片中，姓名固定，联系方式（手机 / 邮箱 / 微信 / 自定义标签等）均可自由添加、删除、修改
 - 🌐 中英界面切换
 - 🔐 **账号系统（纯前端）**：打开网站先登录 / 注册，每个账号的简历数据独立保存在浏览器 `localStorage` 的专属命名空间，**互不覆盖**；支持退出切换账号
 - 💛 **赞助弹窗（非强制）**：点击「打印 / PDF」生成后会弹一次赞助提示（同一会话只弹一次），也可随时点工具栏「赞助 ♥」打开；关闭不影响任何功能
@@ -23,7 +25,7 @@
 与 visiky/resume 的 `resume.json` 兼容，主要字段：
 
 ```
-profile        { name, email, mobile, github, zhihu, workExpYear }
+profile        { name, contacts:[ { label, value }, ... ] }   // name 为标题大字号；contacts 可在编辑器增删改
 avatar         { src, hidden }
 educationList  [ { edu_time:[起,止], school, major, academic_degree } ]
 workExpList    [ { company_name, department_name, work_time:[起,止], work_desc } ]

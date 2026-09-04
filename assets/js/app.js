@@ -34,11 +34,13 @@
     avatar: { src: "", hidden: false },
     profile: {
       name: "你的名字",
-      email: "you@example.com",
-      mobile: "138xxxx8888",
-      github: "https://github.com/yourname",
-      zhihu: "",
-      workExpYear: "3 年"
+      contacts: [
+        { label: "手机", value: "138xxxx8888" },
+        { label: "邮箱", value: "you@example.com" },
+        { label: "GitHub", value: "https://github.com/yourname" },
+        { label: "知乎", value: "" },
+        { label: "工作年限", value: "3 年" }
+      ]
     },
     educationList: [
       {
@@ -74,14 +76,6 @@
 
   /* ---------- 编辑器表单配置 ---------- */
   var FORM = [
-    { type: "object", key: "profile", fields: [
-      { k: "name", t: "姓名", type: "text" },
-      { k: "email", t: "邮箱", type: "text" },
-      { k: "mobile", t: "手机", type: "text" },
-      { k: "github", t: "GitHub", type: "text" },
-      { k: "zhihu", t: "知乎", type: "text" },
-      { k: "workExpYear", t: "工作年限", type: "text" }
-    ]},
     { type: "object", key: "avatar", fields: [
       { k: "src", t: "头像图片链接", type: "text" },
       { k: "hidden", t: "隐藏头像", type: "bool" }
@@ -144,6 +138,12 @@
     { key: "aboutme", label: "个人评价" }
   ];
   var DEFAULT_SECTIONS = ["educationList", "workExpList", "projectList", "skillList", "awardList", "workList", "aboutme"];
+  var DEFAULT_SIDEBAR = ["skillList", "awardList"];
+  // 自定义模块（新增模块）内部结构沿用「更多信息」格式：[{ info, time }]
+  var CUSTOM_FIELDS = [
+    { k: "info", t: "内容", type: "text" },
+    { k: "time", t: "时间", type: "text" }
+  ];
 
   var UI = {
     zh: {
@@ -162,7 +162,7 @@
   };
 
   /* ---------- 状态 ---------- */
-  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh", inline: false, sections: clone(DEFAULT_SECTIONS) };
+  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh", inline: false, sections: clone(DEFAULT_SECTIONS), sidebar: clone(DEFAULT_SIDEBAR) };
 
   /* ---------- 工具函数 ---------- */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -244,12 +244,21 @@
       state.data[s3][idx][f3] = isTimeField(f3) ? parseTime(value) : value;
       return;
     }
+    if (p.length === 4) {
+      var o4 = p[0], k4 = p[1], i4 = Number(p[2]), f4 = p[3];
+      if (!state.data[o4]) state.data[o4] = {};
+      if (!Array.isArray(state.data[o4][k4])) state.data[o4][k4] = [];
+      if (!state.data[o4][k4][i4]) state.data[o4][k4][i4] = {};
+      state.data[o4][k4][i4][f4] = value;
+      return;
+    }
   }
 
   function addItem(sec) {
     var cfg = FORM.find(function (s) { return s.key === sec; });
+    var fields = cfg ? cfg.fields : CUSTOM_FIELDS;
     var obj = {};
-    cfg.fields.forEach(function (f) { obj[f.k] = (f.type === "range") ? ["", ""] : ""; });
+    fields.forEach(function (f) { obj[f.k] = (f.type === "range") ? ["", ""] : ""; });
     if (!Array.isArray(state.data[sec])) state.data[sec] = [];
     state.data[sec].push(obj);
     buildEditor(); renderPreview(); save();
@@ -272,6 +281,34 @@
   function removeSection(key) {
     var i = state.sections.indexOf(key);
     if (i >= 0) state.sections.splice(i, 1);
+    buildEditor(); renderPreview(); save();
+  }
+  function customSectionsList() {
+    var all = state.sections.concat(state.sidebar || []).filter(function (k) {
+      return typeof k === "string" && k.indexOf("custom_") === 0;
+    });
+    return all.filter(function (k, i) { return all.indexOf(k) === i; }).map(function (k) { return { key: k }; });
+  }
+  function addCustomSection(name, toSidebar) {
+    var key = "custom_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+    state.data.titleNameMap = state.data.titleNameMap || {};
+    state.data.titleNameMap[key] = name;
+    state.data[key] = [{ info: "", time: "" }];
+    if (toSidebar) { if (state.sidebar.indexOf(key) < 0) state.sidebar.push(key); }
+    else { if (state.sections.indexOf(key) < 0) state.sections.push(key); }
+    buildEditor(); renderPreview(); save();
+  }
+  function addSidebarSection(key) {
+    if (state.sidebar.indexOf(key) >= 0) return;
+    state.sidebar.push(key);
+    if (state.data[key] === undefined || state.data[key] === null) {
+      state.data[key] = (key === "aboutme") ? { aboutme_desc: "" } : [];
+    }
+    buildEditor(); renderPreview(); save();
+  }
+  function removeSidebarSection(key) {
+    var i = state.sidebar.indexOf(key);
+    if (i >= 0) state.sidebar.splice(i, 1);
     buildEditor(); renderPreview(); save();
   }
 
@@ -333,6 +370,48 @@
       "</div>";
   }
 
+  // 基本信息卡片：姓名固定，联系方式可增删改
+  function buildProfileEditor() {
+    var L = UI[state.lang];
+    var p = state.data.profile || {};
+    var contacts = Array.isArray(p.contacts) ? p.contacts : [];
+    var html = '<div class="card"><h3 class="card-h">' + (L.profile || "基本信息") +
+      '<span class="card-sub">可增删改联系方式</span></h3>';
+    html += '<div class="f"><label class="f-label">姓名（标题大字号）</label>' +
+      '<input type="text" data-sec="profile" data-field="name" value="' + esc(p.name || "") + '"></div>';
+    contacts.forEach(function (c, idx) {
+      html += '<div class="item"><div class="item-h">联系方式 #' + (idx + 1) +
+        ' <button class="btn-mini danger" data-act="contact-del" data-idx="' + idx + '">删除</button></div>';
+      html += '<div class="f"><label class="f-label">标签</label>' +
+        '<input type="text" data-sec="profile" data-field="contacts" data-sub="label" data-idx="' + idx + '" value="' + esc(c.label || "") + '"></div>';
+      html += '<div class="f"><label class="f-label">内容</label>' +
+        '<input type="text" data-sec="profile" data-field="contacts" data-sub="value" data-idx="' + idx + '" value="' + esc(c.value || "") + '"></div>';
+    });
+    html += '<button class="btn-mini" data-act="contact-add">+ 添加联系方式</button>';
+    html += '</div>';
+    return html;
+  }
+
+  // 自定义模块编辑器（award 风格：内容 + 时间）
+  function buildCustomEditor(key) {
+    var L = UI[state.lang];
+    var title = T(key, key);
+    var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
+    var html = '<div class="card"><h3 class="card-h">' + esc(title) +
+      ' <button class="btn-mini" data-act="add" data-sec="' + key + '">+ 添加</button></h3>';
+    html += '<div class="card-sub-edit"><label class="f-label">模块标题（也可直接编辑预览中的标题）</label>' +
+      '<input type="text" data-sec="titleNameMap" data-field="' + key + '" value="' + esc(title) + '"></div>';
+    arr.forEach(function (item, idx) {
+      html += '<div class="item"><div class="item-h">' + esc(title) + ' #' + (idx + 1) +
+        ' <button class="btn-mini danger" data-act="del" data-sec="' + key + '" data-idx="' + idx + '">删除</button></div>';
+      html += fieldHTML(key, idx, { k: "info", t: "内容", type: "text" }, item ? item.info : "");
+      html += fieldHTML(key, idx, { k: "time", t: "时间", type: "text" }, item ? item.time : "");
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   // 读取本地图片文件 -> 缩放为小图 -> dataURL（控制体积，便于存入 localStorage）
   function readAvatarFile(file) {
     if (!file) return;
@@ -367,21 +446,45 @@
     var L = UI[state.lang];
     var html = '<div class="card"><h3 class="card-h">' + (L.sectionManager || "模块管理") +
       '<span class="card-sub">增减简历大模块</span></h3><div class="sec-manager">';
+
+    // 主区域模块
+    html += '<div class="sec-group-title">主区域模块</div>';
     html += '<div class="sec-active">';
     state.sections.forEach(function (key) {
       var sec = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
-      html += '<span class="sec-chip">' + esc(sec ? sec.label : key) +
+      var label = sec ? sec.label : T(key, key);
+      html += '<span class="sec-chip">' + esc(label) +
         '<button class="sec-del" data-act="sec-remove" data-sec-key="' + key + '">×</button></span>';
     });
     html += '</div>';
     var inactive = MAJOR_SECTIONS.filter(function (s) { return state.sections.indexOf(s.key) < 0; });
-    if (inactive.length) {
-      html += '<div class="sec-add-row"><select id="secAddSelect">';
-      inactive.forEach(function (s) {
-        html += '<option value="' + s.key + '">' + esc(s.label) + '</option>';
-      });
-      html += '</select><button class="btn-mini" data-act="sec-add">+ 添加模块</button></div>';
-    }
+    html += '<div class="sec-add-row"><select id="secAddSelect">';
+    html += '<option value="">— 添加预设模块 —</option>';
+    inactive.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label) + '</option>'; });
+    html += '</select><button class="btn-mini" data-act="sec-add">+ 添加</button></div>';
+    html += '<div class="sec-add-row"><input type="text" id="secCustomName" placeholder="自定义模块名（如：证书/爱好）">' +
+      '<button class="btn-mini" data-act="sec-add-custom">+ 自定义模块</button></div>';
+
+    // 侧边栏模块（仅侧边栏模板生效）
+    html += '<div class="sec-group-title">侧边栏模块（侧边栏模板生效）</div>';
+    html += '<div class="sec-active">';
+    (state.sidebar || []).forEach(function (key) {
+      var sec = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
+      var label = sec ? sec.label : T(key, key);
+      html += '<span class="sec-chip">' + esc(label) +
+        '<button class="sec-del" data-act="side-remove" data-sec-key="' + key + '">×</button></span>';
+    });
+    html += '</div>';
+    var sideOptions = MAJOR_SECTIONS.concat(customSectionsList()).filter(function (s) {
+      return state.sidebar.indexOf(s.key) < 0;
+    });
+    html += '<div class="sec-add-row"><select id="sideAddSelect">';
+    html += '<option value="">— 添加侧栏模块 —</option>';
+    sideOptions.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label || T(s.key, s.key)) + '</option>'; });
+    html += '</select><button class="btn-mini" data-act="side-add">+ 添加</button></div>';
+    html += '<div class="sec-add-row"><input type="text" id="sideCustomName" placeholder="自定义侧栏模块名">' +
+      '<button class="btn-mini" data-act="side-add-custom">+ 自定义模块</button></div>';
+
     html += '</div></div>';
     return html;
   }
@@ -389,6 +492,7 @@
   function buildEditor() {
     var L = UI[state.lang];
     var html = buildSectionManager();
+    html += buildProfileEditor();
     FORM.forEach(function (sec) {
       if (isMajorSection(sec.key) && state.sections.indexOf(sec.key) < 0) return;
       if (sec.key === "skillList") { html += buildSkillEditor(); return; }
@@ -412,6 +516,11 @@
         html += "</div>";
       }
     });
+    // 自定义模块（主区域 + 仅侧栏，去重）
+    var customKeys = state.sections.concat(state.sidebar || []).filter(function (k) {
+      return typeof k === "string" && k.indexOf("custom_") === 0;
+    }).filter(function (k, i, a) { return a.indexOf(k) === i; });
+    customKeys.forEach(function (key) { html += buildCustomEditor(key); });
     document.getElementById("editor").innerHTML = html;
   }
 
@@ -425,6 +534,18 @@
       return;
     }
     var sec = t.dataset.sec;
+    // 基本信息-联系方式：profile.contacts[idx].label|value
+    if (sec === "profile" && t.dataset.field === "contacts") {
+      var ci = Number(t.dataset.idx);
+      var csub = t.dataset.sub; // label | value
+      var cval = (t.type === "checkbox") ? t.checked : t.value;
+      if (!state.data.profile) state.data.profile = {};
+      if (!Array.isArray(state.data.profile.contacts)) state.data.profile.contacts = [];
+      if (!state.data.profile.contacts[ci]) state.data.profile.contacts[ci] = {};
+      state.data.profile.contacts[ci][csub] = cval;
+      afterDataChange();
+      return;
+    }
     if (!sec) return;
     var idx = (t.dataset.idx === "" || t.dataset.idx === undefined || t.dataset.idx === null)
       ? null : Number(t.dataset.idx);
@@ -446,6 +567,34 @@
       if (sel && sel.value) addSection(sel.value);
     }
     else if (b.dataset.act === "sec-remove") removeSection(b.dataset.secKey);
+    else if (b.dataset.act === "sec-add-custom") {
+      var nm = (document.getElementById("secCustomName").value || "").trim();
+      if (!nm) { alert("请输入自定义模块名称"); return; }
+      addCustomSection(nm, false);
+    }
+    else if (b.dataset.act === "side-add") {
+      var ssel = document.getElementById("sideAddSelect");
+      if (ssel && ssel.value) addSidebarSection(ssel.value);
+    }
+    else if (b.dataset.act === "side-remove") removeSidebarSection(b.dataset.secKey);
+    else if (b.dataset.act === "side-add-custom") {
+      var snm = (document.getElementById("sideCustomName").value || "").trim();
+      if (!snm) { alert("请输入自定义侧栏模块名称"); return; }
+      addCustomSection(snm, true);
+    }
+    else if (b.dataset.act === "contact-add") {
+      if (!state.data.profile) state.data.profile = {};
+      if (!Array.isArray(state.data.profile.contacts)) state.data.profile.contacts = [];
+      state.data.profile.contacts.push({ label: "", value: "" });
+      buildEditor(); renderPreview(); save();
+    }
+    else if (b.dataset.act === "contact-del") {
+      var di = Number(b.dataset.idx);
+      if (Array.isArray(state.data.profile.contacts) && state.data.profile.contacts[di]) {
+        state.data.profile.contacts.splice(di, 1);
+      }
+      buildEditor(); renderPreview(); save();
+    }
     else if (b.dataset.act === "avup") { var af = document.getElementById("avatarFile"); if (af) af.click(); }
     else if (b.dataset.act === "avrm") {
       state.data.avatar = state.data.avatar || {};
@@ -462,21 +611,20 @@
   /* ---------- 预览渲染 ---------- */
   function contactsItems() {
     var p = state.data.profile || {};
-    var defs = [["mobile", "手机"], ["email", "邮箱"], ["github", "GitHub"], ["zhihu", "知乎"], ["workExpYear", "工作年限"]];
-    var arr = [];
-    defs.forEach(function (d) { if (p[d[0]]) arr.push({ key: d[0], label: d[1], value: p[d[0]] }); });
-    return arr;
+    var list = Array.isArray(p.contacts) ? p.contacts : [];
+    return list.map(function (c, i) { return { item: c, i: i }; })
+      .filter(function (o) { return o.item && o.item.value; });
   }
   function contactsHTML(mode) {
     var items = contactsItems();
     if (mode === "chip") {
-      return items.map(function (it) {
-        return '<span class="chip"' + bind("profile." + it.key) + ">" + esc(it.value) + "</span>";
+      return items.map(function (o) {
+        return '<span class="chip"' + bind("profile.contacts." + o.i + ".value") + ">" + esc(o.item.value) + "</span>";
       }).join("");
     }
-    return items.map(function (it) {
-      return '<div class="side-contact"><span class="sc-k">' + esc(it.label) + "</span>" +
-        '<span class="sc-v"' + bind("profile." + it.key) + ">" + esc(it.value) + "</span></div>";
+    return items.map(function (o) {
+      return '<div class="side-contact"><span class="sc-k"' + bind("profile.contacts." + o.i + ".label") + ">" + esc(o.item.label) + "</span>" +
+        '<span class="sc-v"' + bind("profile.contacts." + o.i + ".value") + ">" + esc(o.item.value) + "</span></div>";
     }).join("");
   }
 
@@ -563,6 +711,17 @@
     }).join("") + "</ul>";
   }
 
+  // 自定义模块（与「更多信息」同结构：[{ info, time }]）
+  function customInner(key) {
+    var list = Array.isArray(state.data[key]) ? state.data[key] : [];
+    if (!list.length) return "";
+    return '<ul class="r-list">' + list.map(function (a, i) {
+      return "<li>" +
+        '<div class="r-row"><span' + bind(key + "." + i + ".info") + ">" + esc(a.info || "") + "</span>" +
+        (a.time ? '<span class="r-time"' + bind(key + "." + i + ".time") + ">" + esc(a.time) + "</span>" : "") + "</div></li>";
+    }).join("") + "</ul>";
+  }
+
   function workListInner() {
     var list = state.data.workList || [];
     if (!list.length) return "";
@@ -582,26 +741,42 @@
 
   function renderPreview() {
     var d = state.data;
-    function active(key) { return state.sections.indexOf(key) >= 0; }
-    var eduB = active("educationList") ? block("educationList", "教育背景", eduInner()) : "";
-    var workB = active("workExpList") ? block("workExpList", "工作经历", workInner()) : "";
-    var projB = active("projectList") ? block("projectList", "项目经验", projectInner()) : "";
-    var skillB = active("skillList") ? block("skillList", "个人技能", skillInner()) : "";
-    var awardB = active("awardList") ? block("awardList", "更多信息", awardInner()) : "";
-    var workListB = active("workList") ? block("workList", "个人作品", workListInner()) : "";
-    var aboutB = active("aboutme") ? block("aboutme", "个人评价", aboutInner()) : "";
+    function titleFor(key) {
+      var preset = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
+      return preset ? preset.label : T(key, key);
+    }
+    function innerFor(key) {
+      switch (key) {
+        case "educationList": return eduInner();
+        case "workExpList": return workInner();
+        case "projectList": return projectInner();
+        case "skillList": return skillInner();
+        case "awardList": return awardInner();
+        case "workList": return workListInner();
+        case "aboutme": return aboutInner();
+        default: return customInner(key);
+      }
+    }
+    function blockFor(key) {
+      return block(key, titleFor(key), innerFor(key));
+    }
     var html = "";
     if (state.template === "tpl-3") {
+      var sideBlocks = (state.sidebar || []).map(blockFor).join("");
+      var mainKeys = (state.sections || []).filter(function (k) {
+        return (state.sidebar || []).indexOf(k) < 0;
+      });
+      var mainBlocks = mainKeys.map(blockFor).join("");
       html = '<div class="resume tpl-3" style="' + themeVars() + '">' +
         '<aside class="r-side">' + avatarHTML("side") +
         '<div class="side-name"' + bind("profile.name") + ">" + esc((d.profile || {}).name || "") + "</div>" +
         '<div class="side-contacts">' + contactsHTML("list") + "</div>" +
-        skillB + awardB + "</aside>" +
-        '<div class="r-main">' + eduB + workB + projB + aboutB + workListB + "</div></div>";
+        sideBlocks + "</aside>" +
+        '<div class="r-main">' + mainBlocks + "</div></div>";
     } else {
+      var blocks = (state.sections || []).map(blockFor).join("");
       html = '<div class="resume ' + state.template + '" style="' + themeVars() + '">' +
-        '<div class="r-header">' + headerHTML() + "</div>" +
-        eduB + workB + projB + skillB + awardB + workListB + aboutB + "</div>";
+        '<div class="r-header">' + headerHTML() + "</div>" + blocks + "</div>";
     }
     document.getElementById("preview").innerHTML = html;
     applyInline();
@@ -638,7 +813,8 @@
     if (!u) return; // 未登录不写入，避免覆盖他人数据
     try {
       localStorage.setItem(dataKey(u), JSON.stringify({
-        data: state.data, template: state.template, lang: state.lang, inline: state.inline, sections: state.sections
+        data: state.data, template: state.template, lang: state.lang, inline: state.inline,
+        sections: state.sections, sidebar: state.sidebar
       }));
       flashSaved();
     } catch (e) { /* 忽略存储异常 */ }
@@ -660,12 +836,25 @@
         var d = clone(DEFAULT_DATA);
         Object.keys(parsed.data).forEach(function (k) { d[k] = parsed.data[k]; });
         state.data = d;
+        // 旧数据可能没有 contacts 数组，从扁平字段迁移
+        if (state.data.profile && !Array.isArray(state.data.profile.contacts)) {
+          var p = state.data.profile;
+          state.data.profile.contacts = [
+            p.mobile ? { label: "手机", value: p.mobile } : null,
+            p.email ? { label: "邮箱", value: p.email } : null,
+            p.github ? { label: "GitHub", value: p.github } : null,
+            p.zhihu ? { label: "知乎", value: p.zhihu } : null,
+            p.workExpYear ? { label: "工作年限", value: p.workExpYear } : null
+          ].filter(Boolean);
+        }
       }
       if (parsed.template) state.template = parsed.template;
       if (parsed.lang) state.lang = parsed.lang;
       if (typeof parsed.inline === "boolean") state.inline = parsed.inline;
       if (Array.isArray(parsed.sections) && parsed.sections.length) state.sections = parsed.sections;
       else state.sections = clone(DEFAULT_SECTIONS);
+      if (Array.isArray(parsed.sidebar) && parsed.sidebar.length) state.sidebar = parsed.sidebar;
+      else state.sidebar = clone(DEFAULT_SIDEBAR);
     } catch (e) { /* 忽略损坏数据 */ }
   }
   // 首个账号注册时，把旧的匿名数据迁移进该账号，避免丢失
@@ -676,6 +865,7 @@
       try {
         var parsed = JSON.parse(old);
         parsed.sections = parsed.sections || clone(DEFAULT_SECTIONS);
+        parsed.sidebar = parsed.sidebar || clone(DEFAULT_SIDEBAR);
         localStorage.setItem(dataKey(u), JSON.stringify(parsed));
         localStorage.removeItem(STORAGE_KEY);
       } catch (e) {}
@@ -700,6 +890,7 @@
         Object.keys(obj).forEach(function (k) { d[k] = obj[k]; });
         state.data = d;
         state.sections = clone(DEFAULT_SECTIONS);
+        state.sidebar = clone(DEFAULT_SIDEBAR);
         state.template = "tpl-1";
         state.inline = false;
         buildEditor(); renderPreview(); save(); syncToolbar();
@@ -713,6 +904,7 @@
     if (!confirm("确定要重置为示例数据吗？当前内容将被覆盖。")) return;
     state.data = clone(DEFAULT_DATA);
     state.sections = clone(DEFAULT_SECTIONS);
+    state.sidebar = clone(DEFAULT_SIDEBAR);
     buildEditor(); renderPreview(); save(); syncToolbar();
   }
   function syncToolbar() {
