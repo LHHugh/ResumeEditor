@@ -73,7 +73,6 @@ npx serve resume-site
 3. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **Deploy from a branch**，
    分支选 **main**、目录选 **/ (root)**，保存即可。本仓库已用此方式发布（纯静态，无需构建）。
 4. 稍等 1~2 分钟构建完成，访问 `https://<你的用户名>.github.io/<仓库名>/` 即可。
-   （本仓库线上地址：**https://lhhugh.github.io/ResumeEditor/**）
 
 > 若使用 **用户页**（仓库名为 `<用户名>.github.io`），站点地址为 `https://<用户名>.github.io/`。
 
