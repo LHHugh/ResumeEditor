@@ -225,7 +225,8 @@
   // 行内编辑：按 data-bind 路径写回数据
   function setByPath(path, value) {
     var p = path.split(".");
-    if (p[0] === "skillList" && p.length === 3) {
+    // 个人技能为字符串数组，预览行内编辑路径 skillList.<i>（2 段）或技能对象 skillList.<i>.<sub>（3 段）
+    if (p[0] === "skillList" && (p.length === 2 || p.length === 3)) {
       var i = Number(p[1]);
       if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
       state.data.skillList[i] = value;
@@ -343,10 +344,17 @@
   function buildSkillEditor() {
     var L = UI[state.lang];
     var arr = Array.isArray(state.data.skillList) ? state.data.skillList : [];
-    var text = arr.join("\n");
-    return '<div class="card"><h3 class="card-h">' + L.skillList + "</h3>" +
-      '<div class="f"><label class="f-label">每行一个技能</label>' +
-      '<textarea data-sec="skillList" data-skill="1" rows="5">' + esc(text) + "</textarea></div></div>";
+    var items = arr.map(function (s, idx) {
+      var t = (typeof s === "object") ? (s.skill || s.skill_name || "") : s;
+      return '<div class="item"><div class="item-h">技能 #' + (idx + 1) +
+        ' <button class="btn-mini danger" data-act="skill-del" data-idx="' + idx + '">删除</button></div>' +
+        '<div class="f"><label class="f-label">技能名称</label>' +
+        '<input type="text" data-skill-idx="' + idx + '" value="' + esc(t) + '"></div></div>';
+    }).join("");
+    return '<div class="card"><h3 class="card-h">' + L.skillList +
+      ' <button class="btn-mini" data-act="skill-add">+ 添加技能</button></h3>' +
+      '<div class="card-sub-edit">每条技能可独立编辑、删除；也可在预览中直接编辑。</div>' +
+      items + "</div>";
   }
 
   // 头像卡片：支持本地上传（自动缩放为小图）、移除、隐藏，也兼容直接粘贴图片 URL
@@ -493,9 +501,11 @@
     var L = UI[state.lang];
     var html = buildSectionManager();
     html += buildProfileEditor();
+    // 个人技能：独立编辑器（每条技能可增删改），不在 FORM 列表中
+    if (state.sections.indexOf("skillList") >= 0) html += buildSkillEditor();
     FORM.forEach(function (sec) {
       if (isMajorSection(sec.key) && state.sections.indexOf(sec.key) < 0) return;
-      if (sec.key === "skillList") { html += buildSkillEditor(); return; }
+      if (sec.key === "skillList") return; // 个人技能已在上方单独渲染
       if (sec.key === "avatar") { html += buildAvatarEditor(); return; }
       if (sec.type === "object") {
         html += '<div class="card"><h3 class="card-h">' + (L[sec.key] || sec.key) + "</h3>";
@@ -527,9 +537,11 @@
   /* ---------- 编辑器事件 ---------- */
   function onEditorInput(e) {
     var t = e.target;
-    if (t.dataset.skill) {
-      var lines = t.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-      state.data.skillList = lines;
+    // 个人技能：单条编辑（每行为独立输入框）
+    if (t.dataset.skillIdx !== undefined && t.dataset.skillIdx !== null && t.dataset.skillIdx !== "") {
+      var si = Number(t.dataset.skillIdx);
+      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
+      state.data.skillList[si] = t.value;
       afterDataChange();
       return;
     }
@@ -562,6 +574,18 @@
     if (!b) return;
     if (b.dataset.act === "add") addItem(b.dataset.sec);
     else if (b.dataset.act === "del") delItem(b.dataset.sec, Number(b.dataset.idx));
+    else if (b.dataset.act === "skill-add") {
+      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
+      state.data.skillList.push("");
+      buildEditor(); renderPreview(); save();
+    }
+    else if (b.dataset.act === "skill-del") {
+      var sdi = Number(b.dataset.idx);
+      if (Array.isArray(state.data.skillList) && state.data.skillList[sdi] !== undefined) {
+        state.data.skillList.splice(sdi, 1);
+      }
+      buildEditor(); renderPreview(); save();
+    }
     else if (b.dataset.act === "sec-add") {
       var sel = document.getElementById("secAddSelect");
       if (sel && sel.value) addSection(sel.value);
@@ -696,8 +720,10 @@
     if (!list.length) return "";
     var tags = list.map(function (s, i) {
       var t = (typeof s === "object") ? (s.skill || s.skill_name || "") : s;
+      if (t == null || !String(t).trim()) return "";
       return '<span class="tag"' + bind("skillList." + i) + ">" + esc(t) + "</span>";
-    }).join("");
+    }).filter(Boolean).join("");
+    if (!tags) return "";
     return '<div class="tags">' + tags + "</div>";
   }
 
