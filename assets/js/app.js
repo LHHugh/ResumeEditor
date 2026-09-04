@@ -133,23 +133,36 @@
     ]}
   ];
 
+  /* ---------- 可增减的大模块 ---------- */
+  var MAJOR_SECTIONS = [
+    { key: "educationList", label: "教育背景" },
+    { key: "workExpList", label: "工作经历" },
+    { key: "projectList", label: "项目经验" },
+    { key: "skillList", label: "个人技能" },
+    { key: "awardList", label: "更多信息" },
+    { key: "workList", label: "个人作品" },
+    { key: "aboutme", label: "个人评价" }
+  ];
+  var DEFAULT_SECTIONS = ["educationList", "workExpList", "projectList", "skillList", "awardList", "workList", "aboutme"];
+
   var UI = {
     zh: {
       profile: "基本信息", avatar: "头像", educationList: "教育背景",
       workExpList: "工作经历", projectList: "项目经验", skillList: "个人技能",
       awardList: "奖项 / 其他", workList: "个人作品", aboutme: "个人评价",
-      titleNameMap: "模块标题", theme: "主题"
+      titleNameMap: "模块标题", theme: "主题", sectionManager: "模块管理"
     },
     en: {
       profile: "Basic Info", avatar: "Avatar", educationList: "Education",
       workExpList: "Work Experience", projectList: "Projects",
       skillList: "Skills", awardList: "Awards / More", workList: "Works",
-      aboutme: "About Me", titleNameMap: "Section Titles", theme: "Theme"
+      aboutme: "About Me", titleNameMap: "Section Titles", theme: "Theme",
+      sectionManager: "Sections"
     }
   };
 
   /* ---------- 状态 ---------- */
-  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh", inline: false };
+  var state = { data: clone(DEFAULT_DATA), template: "tpl-1", lang: "zh", inline: false, sections: clone(DEFAULT_SECTIONS) };
 
   /* ---------- 工具函数 ---------- */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -245,6 +258,22 @@
     if (Array.isArray(state.data[sec])) state.data[sec].splice(idx, 1);
     buildEditor(); renderPreview(); save();
   }
+  function isMajorSection(key) {
+    return MAJOR_SECTIONS.some(function (s) { return s.key === key; });
+  }
+  function addSection(key) {
+    if (state.sections.indexOf(key) >= 0) return;
+    state.sections.push(key);
+    if (state.data[key] === undefined || state.data[key] === null) {
+      state.data[key] = clone(DEFAULT_DATA[key] || (key === "aboutme" ? { aboutme_desc: "" } : []));
+    }
+    buildEditor(); renderPreview(); save();
+  }
+  function removeSection(key) {
+    var i = state.sections.indexOf(key);
+    if (i >= 0) state.sections.splice(i, 1);
+    buildEditor(); renderPreview(); save();
+  }
 
   /* ---------- 编辑器渲染 ---------- */
   function fieldHTML(sec, idx, f, val) {
@@ -334,10 +363,34 @@
     reader.readAsDataURL(file);
   }
 
+  function buildSectionManager() {
+    var L = UI[state.lang];
+    var html = '<div class="card"><h3 class="card-h">' + (L.sectionManager || "模块管理") +
+      '<span class="card-sub">增减简历大模块</span></h3><div class="sec-manager">';
+    html += '<div class="sec-active">';
+    state.sections.forEach(function (key) {
+      var sec = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
+      html += '<span class="sec-chip">' + esc(sec ? sec.label : key) +
+        '<button class="sec-del" data-act="sec-remove" data-sec-key="' + key + '">×</button></span>';
+    });
+    html += '</div>';
+    var inactive = MAJOR_SECTIONS.filter(function (s) { return state.sections.indexOf(s.key) < 0; });
+    if (inactive.length) {
+      html += '<div class="sec-add-row"><select id="secAddSelect">';
+      inactive.forEach(function (s) {
+        html += '<option value="' + s.key + '">' + esc(s.label) + '</option>';
+      });
+      html += '</select><button class="btn-mini" data-act="sec-add">+ 添加模块</button></div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
   function buildEditor() {
     var L = UI[state.lang];
-    var html = "";
+    var html = buildSectionManager();
     FORM.forEach(function (sec) {
+      if (isMajorSection(sec.key) && state.sections.indexOf(sec.key) < 0) return;
       if (sec.key === "skillList") { html += buildSkillEditor(); return; }
       if (sec.key === "avatar") { html += buildAvatarEditor(); return; }
       if (sec.type === "object") {
@@ -388,6 +441,11 @@
     if (!b) return;
     if (b.dataset.act === "add") addItem(b.dataset.sec);
     else if (b.dataset.act === "del") delItem(b.dataset.sec, Number(b.dataset.idx));
+    else if (b.dataset.act === "sec-add") {
+      var sel = document.getElementById("secAddSelect");
+      if (sel && sel.value) addSection(sel.value);
+    }
+    else if (b.dataset.act === "sec-remove") removeSection(b.dataset.secKey);
     else if (b.dataset.act === "avup") { var af = document.getElementById("avatarFile"); if (af) af.click(); }
     else if (b.dataset.act === "avrm") {
       state.data.avatar = state.data.avatar || {};
@@ -524,13 +582,14 @@
 
   function renderPreview() {
     var d = state.data;
-    var eduB = block("educationList", "教育背景", eduInner());
-    var workB = block("workExpList", "工作经历", workInner());
-    var projB = block("projectList", "项目经验", projectInner());
-    var skillB = block("skillList", "个人技能", skillInner());
-    var awardB = block("awardList", "更多信息", awardInner());
-    var workListB = block("workList", "个人作品", workListInner());
-    var aboutB = block("aboutme", "个人评价", aboutInner());
+    function active(key) { return state.sections.indexOf(key) >= 0; }
+    var eduB = active("educationList") ? block("educationList", "教育背景", eduInner()) : "";
+    var workB = active("workExpList") ? block("workExpList", "工作经历", workInner()) : "";
+    var projB = active("projectList") ? block("projectList", "项目经验", projectInner()) : "";
+    var skillB = active("skillList") ? block("skillList", "个人技能", skillInner()) : "";
+    var awardB = active("awardList") ? block("awardList", "更多信息", awardInner()) : "";
+    var workListB = active("workList") ? block("workList", "个人作品", workListInner()) : "";
+    var aboutB = active("aboutme") ? block("aboutme", "个人评价", aboutInner()) : "";
     var html = "";
     if (state.template === "tpl-3") {
       html = '<div class="resume tpl-3" style="' + themeVars() + '">' +
@@ -579,7 +638,7 @@
     if (!u) return; // 未登录不写入，避免覆盖他人数据
     try {
       localStorage.setItem(dataKey(u), JSON.stringify({
-        data: state.data, template: state.template, lang: state.lang, inline: state.inline
+        data: state.data, template: state.template, lang: state.lang, inline: state.inline, sections: state.sections
       }));
       flashSaved();
     } catch (e) { /* 忽略存储异常 */ }
@@ -605,6 +664,8 @@
       if (parsed.template) state.template = parsed.template;
       if (parsed.lang) state.lang = parsed.lang;
       if (typeof parsed.inline === "boolean") state.inline = parsed.inline;
+      if (Array.isArray(parsed.sections) && parsed.sections.length) state.sections = parsed.sections;
+      else state.sections = clone(DEFAULT_SECTIONS);
     } catch (e) { /* 忽略损坏数据 */ }
   }
   // 首个账号注册时，把旧的匿名数据迁移进该账号，避免丢失
@@ -612,7 +673,12 @@
     var old = null;
     try { old = localStorage.getItem(STORAGE_KEY); } catch (e) {}
     if (old) {
-      try { localStorage.setItem(dataKey(u), old); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+      try {
+        var parsed = JSON.parse(old);
+        parsed.sections = parsed.sections || clone(DEFAULT_SECTIONS);
+        localStorage.setItem(dataKey(u), JSON.stringify(parsed));
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {}
     }
   }
 
@@ -633,6 +699,7 @@
         var d = clone(DEFAULT_DATA);
         Object.keys(obj).forEach(function (k) { d[k] = obj[k]; });
         state.data = d;
+        state.sections = clone(DEFAULT_SECTIONS);
         state.template = "tpl-1";
         state.inline = false;
         buildEditor(); renderPreview(); save(); syncToolbar();
@@ -645,6 +712,7 @@
   function resetAll() {
     if (!confirm("确定要重置为示例数据吗？当前内容将被覆盖。")) return;
     state.data = clone(DEFAULT_DATA);
+    state.sections = clone(DEFAULT_SECTIONS);
     buildEditor(); renderPreview(); save(); syncToolbar();
   }
   function syncToolbar() {
@@ -755,8 +823,8 @@
   /* ---------- 赞助系统（非强制弹窗） ---------- */
   var SPONSOR = {
     enabled: true,
-    // 替换为你的支付宝收款码图片（如 assets/img/alipay-qr.png）
-    qr: "assets/img/alipay-qr.svg",
+    // 支付宝收款码图片
+    qr: "assets/img/alipay-qr.jpg",
     title: "如果这个工具帮到了你 💛",
     text: "制作简历免费、无广告。如果愿意，可以请作者喝杯咖啡～ 赞助完全自愿，不影响任何功能。"
   };

@@ -12,7 +12,8 @@
 - 📷 **头像本地上传**：左侧「头像」卡片可上传本地照片（自动缩放为小图、也可直接粘贴图片 URL），点击预览中的头像也能上传；形状为圆角长方形
 - 💾 内容自动保存到浏览器 `localStorage`，刷新不丢失
 - 📤 导出 `resume.json` / 导入已有的 `resume.json`（兼容 visiky 数据结构）
-- 🖨️ 一键「打印 / PDF」导出（建议打印时选「另存为 PDF」、关闭页眉页脚）
+- 🖨️ 一键「打印 / PDF」导出：按 A4（210 mm × 297 mm）全幅输出，无浏览器默认白边
+- 🧩 **模块可增减**：左侧「模块管理」可自由添加 / 删除「教育背景、工作经历、项目经验、个人技能、更多信息、个人作品、个人评价」等大模块
 - 🌐 中英界面切换
 - 🔐 **账号系统（纯前端）**：打开网站先登录 / 注册，每个账号的简历数据独立保存在浏览器 `localStorage` 的专属命名空间，**互不覆盖**；支持退出切换账号
 - 💛 **赞助弹窗（非强制）**：点击「打印 / PDF」生成后会弹一次赞助提示（同一会话只弹一次），也可随时点工具栏「赞助 ♥」打开；关闭不影响任何功能
@@ -87,13 +88,10 @@ npx serve resume-site
 
 ## 自定义赞助二维码
 
-赞助弹窗默认展示一张**占位图** `assets/img/alipay-qr.svg`。替换为你自己的支付宝收款码：
+赞助弹窗已使用本仓库的支付宝收款码 `assets/img/alipay-qr.jpg`。如需替换：
 
-1. 把你的支付宝收款码图片放到 `assets/img/`，命名为 `alipay-qr.png`（或用你喜欢的名字）；
-2. 打开 `assets/js/app.js`，修改顶部的 `SPONSOR.qr` 为你图片的路径，例如：
-   ```js
-   var SPONSOR = { enabled: true, qr: "assets/img/alipay-qr.png", title: "...", text: "..." };
-   ```
+1. 把你的支付宝收款码图片放到 `assets/img/`，命名为 `alipay-qr.jpg`；
+2. 打开 `assets/js/app.js`，确认 `SPONSOR.qr` 指向你的图片路径即可。
 3. 若不想显示赞助，可把 `SPONSOR.enabled` 设为 `false`。
 
 ## 目录结构
@@ -102,9 +100,9 @@ npx serve resume-site
 resume-site/
 ├── index.html              # 入口页面
 ├── assets/
-│   ├── css/style.css       # 三套模板 + 主题变量 + 登录/弹窗 + 打印样式
-│   ├── js/app.js           # 编辑器 / 预览 / 持久化 / 账号 / 赞助
-│   ├── img/alipay-qr.svg   # 赞助二维码占位图（替换为你的 alipay-qr.png）
+│   ├── css/style.css       # 三套模板 + 主题变量 + 登录/弹窗/打印样式
+│   ├── js/app.js           # 编辑器 / 预览 / 持久化 / 账号 / 赞助 / 模块管理
+│   ├── img/alipay-qr.jpg   # 赞助二维码
 │   └── data/sample.json    # 示例数据（可直接作为 resume.json 导入）
 └── README.md
 ```
