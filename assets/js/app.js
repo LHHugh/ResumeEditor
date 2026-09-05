@@ -143,11 +143,28 @@
   ];
   var DEFAULT_SECTIONS = ["educationList", "workExpList", "projectList", "skillList", "awardList", "workList", "aboutme"];
   var DEFAULT_SIDEBAR = ["skillList", "awardList"];
-  // 自定义模块（新增模块）内部结构沿用「更多信息」格式：[{ info, time }]
-  var CUSTOM_FIELDS = [
-    { k: "info", t: "内容", type: "text" },
-    { k: "time", t: "时间", type: "text" }
-  ];
+  // 自定义模块（新增模块）内部结构格式：
+  // more=更多信息（内容+时间） / edu=教育背景 / project=项目经验 / skills=个人技能（分组标签，单独渲染）
+  var CUSTOM_FORMATS = {
+    more: [
+      { k: "info", t: "内容", type: "text" },
+      { k: "time", t: "时间", type: "text" }
+    ],
+    edu: [
+      { k: "edu_time", t: "时间（起 / 止）", type: "range" },
+      { k: "school", t: "学校", type: "text" },
+      { k: "major", t: "专业", type: "text" },
+      { k: "academic_degree", t: "学历", type: "text" }
+    ],
+    project: [
+      { k: "project_name", t: "项目名称", type: "text" },
+      { k: "project_role", t: "角色", type: "text" },
+      { k: "project_time", t: "时间", type: "text" },
+      { k: "project_desc", t: "简介", type: "textarea" },
+      { k: "project_content", t: "内容（每行一条）", type: "textarea" }
+    ]
+  };
+  var CUSTOM_FIELDS = CUSTOM_FORMATS.more; // 兼容旧引用
 
   var UI = {
     zh: {
@@ -282,9 +299,8 @@
 
   function addItem(sec) {
     var cfg = FORM.find(function (s) { return s.key === sec; });
-    var fields = cfg ? cfg.fields : CUSTOM_FIELDS;
-    var obj = {};
-    fields.forEach(function (f) { obj[f.k] = (f.type === "range") ? ["", ""] : ""; });
+    var fields = cfg ? cfg.fields : (CUSTOM_FORMATS[customFormat(sec)] || CUSTOM_FIELDS);
+    var obj = emptyObjFrom(fields);
     if (!Array.isArray(state.data[sec])) state.data[sec] = [];
     state.data[sec].push(obj);
     buildEditor(); renderPreview(); save();
@@ -315,12 +331,27 @@
     });
     return all.filter(function (k, i) { return all.indexOf(k) === i; }).map(function (k) { return { key: k }; });
   }
+  function emptyObjFrom(fields) {
+    var obj = {};
+    (fields || []).forEach(function (f) { obj[f.k] = (f.type === "range") ? ["", ""] : ""; });
+    return obj;
+  }
   function addCustomSection(name, toSidebar, format) {
     var key = "custom_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
     state.data.titleNameMap = state.data.titleNameMap || {};
     state.data.titleNameMap[key] = name;
-    // format: "skills"（个人技能格式：分组标签）或 "more"（更多信息格式：内容+时间）
-    state.data[key] = (format === "skills") ? [{ name: "", items: [] }] : [{ info: "", time: "" }];
+    // format: "more"（更多信息）/ "edu"（教育背景）/ "project"（项目经验）/ "skills"（个人技能分组）
+    if (format === "skills") {
+      state.data[key] = [{ name: "", items: [] }];
+    } else if (format === "edu" || format === "project") {
+      state.data[key] = [emptyObjFrom(CUSTOM_FORMATS[format])];
+    } else {
+      format = "more";
+      state.data[key] = [emptyObjFrom(CUSTOM_FORMATS.more)];
+    }
+    // 格式持久化：避免条目删空后格式信息丢失
+    state.data._formats = state.data._formats || {};
+    state.data._formats[key] = format;
     if (toSidebar) { if (state.sidebar.indexOf(key) < 0) state.sidebar.push(key); }
     else { if (state.sections.indexOf(key) < 0) state.sections.push(key); }
     buildEditor(); renderPreview(); save();
@@ -439,10 +470,11 @@
     return html;
   }
 
-  // 自定义模块编辑器（award 风格：内容 + 时间）
+  // 自定义模块编辑器：按格式（更多信息 / 教育背景 / 项目经验）渲染对应字段
   function buildCustomEditor(key) {
     var L = UI[state.lang];
     var title = T(key, key);
+    var fields = CUSTOM_FORMATS[customFormat(key)] || CUSTOM_FORMATS.more;
     var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
     var html = '<div class="card"><h3 class="card-h">' + esc(title) +
       ' <button class="btn-mini" data-act="add" data-sec="' + key + '">+ 添加</button></h3>';
@@ -451,8 +483,9 @@
     arr.forEach(function (item, idx) {
       html += '<div class="item"><div class="item-h">' + esc(title) + ' #' + (idx + 1) +
         ' <button class="btn-mini danger" data-act="del" data-sec="' + key + '" data-idx="' + idx + '">删除</button></div>';
-      html += fieldHTML(key, idx, { k: "info", t: "内容", type: "text" }, item ? item.info : "");
-      html += fieldHTML(key, idx, { k: "time", t: "时间", type: "text" }, item ? item.time : "");
+      fields.forEach(function (f) {
+        html += fieldHTML(key, idx, f, item ? item[f.k] : (f.type === "range" ? ["", ""] : ""));
+      });
       html += '</div>';
     });
     html += '</div>';
@@ -510,7 +543,7 @@
     inactive.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="sec-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="secCustomName" placeholder="自定义模块名（如：证书/爱好）">' +
-      '<select id="secCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="skills">个人技能格式</option></select>' +
+      '<select id="secCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="sec-add-custom">+ 自定义模块</button></div>';
 
     // 侧边栏模块（仅侧边栏模板生效）
@@ -531,7 +564,7 @@
     sideOptions.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label || T(s.key, s.key)) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="side-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="sideCustomName" placeholder="自定义侧栏模块名">' +
-      '<select id="sideCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="skills">个人技能格式</option></select>' +
+      '<select id="sideCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="side-add-custom">+ 自定义模块</button></div>';
 
     html += '</div></div>';
@@ -892,13 +925,26 @@
     }).join("") + "</ul>";
   }
 
-  // 判断自定义模块的内部结构格式：含 info/time 视为「更多信息」格式，否则「个人技能」分组格式
+  // 判断自定义模块的内部结构格式：优先读 _formats 持久化记录，回退到首条数据形状推断（兼容旧数据）
   function customFormat(key) {
+    var known = ["more", "edu", "project", "skills"];
+    var f = state.data._formats && state.data._formats[key];
+    if (known.indexOf(f) >= 0) return f;
     var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
     if (!arr.length) return "more";
     var it = arr[0];
+    if (it && (it.school !== undefined || it.edu_time !== undefined || it.academic_degree !== undefined)) return "edu";
+    if (it && (it.project_name !== undefined || it.project_role !== undefined || it.project_desc !== undefined || it.project_content !== undefined)) return "project";
     if (it && (it.info !== undefined || it.time !== undefined || it.award_info !== undefined)) return "more";
     return "skills";
+  }
+  // 旧数据回填格式记录（load / importJSON 后调用）
+  function syncCustomFormats() {
+    Object.keys(state.data).forEach(function (k) {
+      if (k.indexOf("custom_") !== 0) return;
+      state.data._formats = state.data._formats || {};
+      if (!state.data._formats[k]) state.data._formats[k] = customFormat(k);
+    });
   }
 
   // 自定义模块（与「更多信息」同结构：[{ info, time }]）
@@ -910,6 +956,45 @@
         '<div class="r-row"><span' + bind(key + "." + i + ".info") + ">" + esc(a.info || "") + "</span>" +
         (a.time ? '<span class="r-time"' + bind(key + "." + i + ".time") + ">" + esc(a.time) + "</span>" : "") + "</div></li>";
     }).join("") + "</ul>";
+  }
+
+  // 自定义模块「教育背景格式」渲染（与 educationList 同版式，键参数化）
+  function customEduInner(key) {
+    var list = Array.isArray(state.data[key]) ? state.data[key] : [];
+    if (!list.length) return "";
+    return '<ul class="r-list">' + list.map(function (e, i) {
+      var time = fmtRange(e.edu_time);
+      var parts = [];
+      if (e.major) parts.push('<span' + bind(key + "." + i + ".major") + ">" + esc(e.major) + "</span>");
+      if (e.academic_degree) parts.push('<span' + bind(key + "." + i + ".academic_degree") + ">" + esc(e.academic_degree) + "</span>");
+      return "<li>" +
+        '<div class="r-row"><span class="r-strong"' + bind(key + "." + i + ".school") + ">" + esc(e.school || "") + "</span>" +
+        (time ? '<span class="r-time"' + bind(key + "." + i + ".edu_time") + ">" + esc(time) + "</span>" : "") + "</div>" +
+        (parts.length ? '<div class="r-sub">' + parts.join(" · ") + "</div>" : "") + "</li>";
+    }).join("") + "</ul>";
+  }
+
+  // 自定义模块「项目经验格式」渲染（与 projectList 同版式，键参数化）
+  function customProjectInner(key) {
+    var list = Array.isArray(state.data[key]) ? state.data[key] : [];
+    if (!list.length) return "";
+    return '<ul class="r-list">' + list.map(function (p, i) {
+      return "<li>" +
+        '<div class="r-row"><span class="r-strong"' + bind(key + "." + i + ".project_name") + ">" + esc(p.project_name || "") + "</span>" +
+        (p.project_time ? '<span class="r-time"' + bind(key + "." + i + ".project_time") + ">" + esc(p.project_time) + "</span>" : "") + "</div>" +
+        (p.project_role ? '<div class="r-sub"' + bind(key + "." + i + ".project_role") + ">" + esc(p.project_role) + "</div>" : "") +
+        (p.project_desc ? '<div class="r-desc"' + bind(key + "." + i + ".project_desc") + ">" + ml(p.project_desc) + "</div>" : "") +
+        (p.project_content ? '<div class="r-desc"' + bind(key + "." + i + ".project_content") + ">" + ml(p.project_content) + "</div>" : "") + "</li>";
+    }).join("") + "</ul>";
+  }
+
+  // 自定义模块预览统一入口：按格式分派
+  function customInnerFor(key) {
+    var f = customFormat(key);
+    if (f === "skills") return skillGroupInner(key, state.data[key] || []);
+    if (f === "edu") return customEduInner(key);
+    if (f === "project") return customProjectInner(key);
+    return customInner(key);
   }
 
   function workListInner() {
@@ -944,7 +1029,7 @@
         case "awardList": return awardInner();
         case "workList": return workListInner();
         case "aboutme": return aboutInner();
-        default: return customFormat(key) === "skills" ? skillGroupInner(key, state.data[key] || []) : customInner(key);
+        default: return customInnerFor(key);
       }
     }
     function blockFor(key) {
@@ -1039,6 +1124,8 @@
         }
         // 旧版扁平字符串技能数组迁移为分组结构
         state.data.skillList = normSkills(state.data.skillList);
+        // 为旧数据回填自定义模块格式记录
+        syncCustomFormats();
       }
       if (parsed.template) state.template = parsed.template;
       if (parsed.lang) state.lang = parsed.lang;
@@ -1066,7 +1153,11 @@
 
   /* ---------- 工具栏动作 ---------- */
   function exportJSON() {
-    var blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
+    var out = {};
+    Object.keys(state.data).forEach(function (k) {
+      if (k !== "_formats") out[k] = state.data[k]; // 内部格式记录不导出
+    });
+    var blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url; a.download = "resume.json";
@@ -1082,6 +1173,7 @@
         Object.keys(obj).forEach(function (k) { d[k] = obj[k]; });
         d.skillList = normSkills(d.skillList);
         state.data = d;
+        syncCustomFormats();
         state.sections = clone(DEFAULT_SECTIONS);
         state.sidebar = clone(DEFAULT_SIDEBAR);
         state.template = "tpl-1";
