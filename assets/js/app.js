@@ -455,7 +455,7 @@
     var L = UI[state.lang];
     var p = state.data.profile || {};
     var contacts = Array.isArray(p.contacts) ? p.contacts : [];
-    var html = '<div class="card"><h3 class="card-h">' + (L.profile || "基本信息") +
+    var html = '<div class="card card-profile"><h3 class="card-h">' + (L.profile || "基本信息") +
       '<span class="card-sub">可增删改联系方式</span></h3>';
     html += '<div class="f"><label class="f-label">姓名（标题大字号）</label>' +
       '<input type="text" data-sec="profile" data-field="name" value="' + esc(p.name || "") + '"></div>';
