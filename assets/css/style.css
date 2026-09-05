@@ -388,10 +388,13 @@ body {
 }
 .item-sub input[type="text"]:focus { outline: none; border-color: #3b82f6; }
 .item-sub-list { margin-bottom: 6px; }
-.skill-g-name {
+/* 分组名：行内小标签，与技能标签同处一个流式容器（一行放满再换行） */
+.skill-g-label {
+  display: inline-flex; align-items: center;
   font-size: 12px; font-weight: 600; color: #3b5bdb;
-  margin: 4px 0 6px; padding-left: 8px; border-left: 3px solid var(--tag-color, #8bc34a);
+  padding: 0 8px; margin: 2px 0; align-self: center;
 }
+.skill-g-label::after { content: "："; font-weight: 600; }
 .sec-add-row select {
   border: 1px solid #d7dde5; border-radius: 6px; padding: 5px 6px; font-size: 12px;
   background: #fff; color: #222; font-family: inherit;

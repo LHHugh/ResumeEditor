@@ -784,19 +784,22 @@
   }
 
   // 渲染分组技能：<key> 为数据键（skillList 或自定义技能模块键），用于行内编辑绑定路径
+  // 布局：所有分组放入同一个流式容器，标签一行放满再换行；分组名作为行内小标签穿插其中
   function skillGroupInner(key, list) {
     var groups = normSkills(list);
     if (!groups.length) return "";
-    var html = groups.map(function (g, gi) {
-      var items = (g.items || []).filter(function (s) { return s != null && String(s).trim(); });
-      if (!items.length) return "";
-      var nameLbl = g.name ? '<div class="skill-g-name" ' + bind(key + "." + gi + ".name") + ">" + esc(g.name) + "</div>" : "";
-      var tags = items.map(function (s, si) {
-        return '<span class="tag"' + bind(key + "." + gi + ".items." + si) + ">" + esc(s) + "</span>";
-      }).join("");
-      return nameLbl + '<div class="tags">' + tags + "</div>";
-    }).filter(Boolean).join("");
-    return html;
+    var parts = [];
+    groups.forEach(function (g, gi) {
+      if (g.name) {
+        parts.push('<span class="skill-g-label" ' + bind(key + "." + gi + ".name") + ">" + esc(g.name) + "</span>");
+      }
+      (g.items || []).forEach(function (s, si) {
+        if (s == null || !String(s).trim()) return;
+        parts.push('<span class="tag"' + bind(key + "." + gi + ".items." + si) + ">" + esc(s) + "</span>");
+      });
+    });
+    if (!parts.length) return "";
+    return '<div class="tags">' + parts.join("") + "</div>";
   }
   function skillInner() {
     var html = skillGroupInner("skillList", state.data.skillList || []);
