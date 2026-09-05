@@ -495,12 +495,12 @@
       '<span class="card-sub">增减简历大模块</span></h3><div class="sec-manager">';
 
     // 主区域模块
-    html += '<div class="sec-group-title">主区域模块</div>';
-    html += '<div class="sec-active">';
+    html += '<div class="sec-group-title">主区域模块<span class="card-sub">长按拖动可调整顺序</span></div>';
+    html += '<div class="sec-active" data-drag-group="main">';
     state.sections.forEach(function (key) {
       var sec = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
       var label = sec ? sec.label : T(key, key);
-      html += '<span class="sec-chip">' + esc(label) +
+      html += '<span class="sec-chip" data-drag-sec="' + key + '" title="长按拖动调整顺序">' + esc(label) +
         '<button class="sec-del" data-act="sec-remove" data-sec-key="' + key + '">×</button></span>';
     });
     html += '</div>';
@@ -514,12 +514,12 @@
       '<button class="btn-mini" data-act="sec-add-custom">+ 自定义模块</button></div>';
 
     // 侧边栏模块（仅侧边栏模板生效）
-    html += '<div class="sec-group-title">侧边栏模块（侧边栏模板生效）</div>';
-    html += '<div class="sec-active">';
+    html += '<div class="sec-group-title">侧边栏模块（侧边栏模板生效）<span class="card-sub">长按拖动可调整顺序</span></div>';
+    html += '<div class="sec-active" data-drag-group="side">';
     (state.sidebar || []).forEach(function (key) {
       var sec = MAJOR_SECTIONS.find(function (s) { return s.key === key; });
       var label = sec ? sec.label : T(key, key);
-      html += '<span class="sec-chip">' + esc(label) +
+      html += '<span class="sec-chip" data-drag-sec="' + key + '" title="长按拖动调整顺序">' + esc(label) +
         '<button class="sec-del" data-act="side-remove" data-sec-key="' + key + '">×</button></span>';
     });
     html += '</div>';
@@ -536,6 +536,81 @@
 
     html += '</div></div>';
     return html;
+  }
+
+  /* ---------- 模块管理：长按拖动排序（Pointer 事件，鼠标/触屏通用） ---------- */
+  var chipDrag = null; // { key, group, srcEl, timer, active, startX, startY }
+
+  function onChipPointerDown(e) {
+    if (chipDrag) return;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest("[data-act]")) return; // 删除按钮等不触发拖动
+    var chip = t.closest("[data-drag-sec]");
+    if (!chip || !chip.closest) return;
+    var container = chip.closest("[data-drag-group]");
+    if (!container) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    chipDrag = {
+      key: chip.dataset ? chip.dataset.dragSec : chip.getAttribute("data-drag-sec"),
+      group: container.dataset ? container.dataset.dragGroup : container.getAttribute("data-drag-group"),
+      srcEl: chip, timer: null, active: false,
+      startX: e.clientX, startY: e.clientY
+    };
+    chipDrag.timer = setTimeout(function () {
+      if (!chipDrag) return;
+      chipDrag.active = true;
+      if (chipDrag.srcEl.classList) chipDrag.srcEl.classList.add("dragging");
+    }, 260);
+  }
+
+  function onChipPointerMove(e) {
+    if (!chipDrag) return;
+    if (!chipDrag.active) {
+      // 长按生效前移动过多 → 视为普通点击/滚动，取消
+      var dx = e.clientX - chipDrag.startX, dy = e.clientY - chipDrag.startY;
+      if (dx * dx + dy * dy > 144) { clearTimeout(chipDrag.timer); chipDrag = null; }
+      return;
+    }
+    if (e.cancelable && e.preventDefault) e.preventDefault();
+    var el = document.elementFromPoint ? document.elementFromPoint(e.clientX, e.clientY) : null;
+    var chip = el && el.closest ? el.closest("[data-drag-sec]") : null;
+    if (!chip || chip === chipDrag.srcEl) return;
+    var container = chip.closest("[data-drag-group]");
+    if (!container) return;
+    var group = container.dataset ? container.dataset.dragGroup : container.getAttribute("data-drag-group");
+    if (group !== chipDrag.group) return; // 只允许同组内排序
+    var rect = chip.getBoundingClientRect ? chip.getBoundingClientRect() : { left: 0, width: 0 };
+    var after = e.clientX > rect.left + rect.width / 2;
+    var parent = chip.parentNode;
+    if (!parent) return;
+    if (after) parent.insertBefore(chipDrag.srcEl, chip.nextSibling);
+    else parent.insertBefore(chipDrag.srcEl, chip);
+  }
+
+  function onChipPointerUp() {
+    if (!chipDrag) return;
+    clearTimeout(chipDrag.timer);
+    var d = chipDrag;
+    chipDrag = null;
+    if (d.srcEl && d.srcEl.classList) d.srcEl.classList.remove("dragging");
+    if (!d.active || !d.srcEl || !d.srcEl.parentNode) return;
+    // 读取拖动后的 DOM 顺序写回状态
+    var chips = d.srcEl.parentNode.querySelectorAll("[data-drag-sec]");
+    var order = [];
+    Array.prototype.forEach.call(chips, function (c) {
+      order.push(c.dataset ? c.dataset.dragSec : c.getAttribute("data-drag-sec"));
+    });
+    var arr = (d.group === "side") ? state.sidebar : state.sections;
+    if (!order.length || order.length !== arr.length) { buildEditor(); return; }
+    var changed = order.some(function (k, i) { return arr[i] !== k; });
+    if (changed) {
+      if (d.group === "side") state.sidebar = order;
+      else state.sections = order;
+      buildEditor(); renderPreview(); save();
+    } else {
+      buildEditor(); // 未变化也重建，清理样式
+    }
   }
 
   function buildEditor() {
@@ -1158,6 +1233,10 @@
     editor.addEventListener("input", onEditorInput);
     editor.addEventListener("change", onEditorInput);
     editor.addEventListener("click", onEditorClick);
+    editor.addEventListener("pointerdown", onChipPointerDown);
+    document.addEventListener("pointermove", onChipPointerMove);
+    document.addEventListener("pointerup", onChipPointerUp);
+    document.addEventListener("pointercancel", onChipPointerUp);
 
     var preview = document.getElementById("preview");
     preview.addEventListener("input", onPreviewInput);

@@ -399,3 +399,10 @@ body {
   border: 1px solid #d7dde5; border-radius: 6px; padding: 5px 6px; font-size: 12px;
   background: #fff; color: #222; font-family: inherit;
 }
+
+/* 模块管理：长按拖动排序 */
+.sec-chip {
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; cursor: grab;
+}
+.sec-chip.dragging { opacity: .55; cursor: grabbing; }
