@@ -340,9 +340,11 @@
     var key = "custom_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
     state.data.titleNameMap = state.data.titleNameMap || {};
     state.data.titleNameMap[key] = name;
-    // format: "more"（更多信息）/ "edu"（教育背景）/ "project"（项目经验）/ "skills"（个人技能分组）
+    // format: "more"（更多信息）/ "edu"（教育背景）/ "project"（项目经验）/ "about"（个人评价）/ "skills"（个人技能分组）
     if (format === "skills") {
       state.data[key] = [{ name: "", items: [] }];
+    } else if (format === "about") {
+      state.data[key] = { aboutme_desc: "" }; // 个人评价为对象结构（非数组）
     } else if (format === "edu" || format === "project") {
       state.data[key] = [emptyObjFrom(CUSTOM_FORMATS[format])];
     } else {
@@ -470,11 +472,21 @@
     return html;
   }
 
-  // 自定义模块编辑器：按格式（更多信息 / 教育背景 / 项目经验）渲染对应字段
+  // 自定义模块编辑器：按格式（更多信息 / 教育背景 / 项目经验 / 个人评价）渲染对应字段
   function buildCustomEditor(key) {
     var L = UI[state.lang];
     var title = T(key, key);
-    var fields = CUSTOM_FORMATS[customFormat(key)] || CUSTOM_FORMATS.more;
+    var fmt = customFormat(key);
+    // 个人评价格式：对象结构，渲染单个多行文本域（无条目增删）
+    if (fmt === "about") {
+      var a = state.data[key] || {};
+      return '<div class="card"><h3 class="card-h">' + esc(title) + "</h3>" +
+        '<div class="card-sub-edit"><label class="f-label">模块标题（也可直接编辑预览中的标题）</label>' +
+        '<input type="text" data-sec="titleNameMap" data-field="' + key + '" value="' + esc(title) + '"></div>' +
+        '<div class="f"><label class="f-label">评价内容（每行一条）</label>' +
+        '<textarea data-sec="' + key + '" data-field="aboutme_desc" rows="4">' + esc((a && a.aboutme_desc) || "") + "</textarea></div></div>";
+    }
+    var fields = CUSTOM_FORMATS[fmt] || CUSTOM_FORMATS.more;
     var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
     var html = '<div class="card"><h3 class="card-h">' + esc(title) +
       ' <button class="btn-mini" data-act="add" data-sec="' + key + '">+ 添加</button></h3>';
@@ -543,7 +555,7 @@
     inactive.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="sec-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="secCustomName" placeholder="自定义模块名（如：证书/爱好）">' +
-      '<select id="secCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="skills">个人技能格式</option></select>' +
+      '<select id="secCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="about">个人评价格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="sec-add-custom">+ 自定义模块</button></div>';
 
     // 侧边栏模块（仅侧边栏模板生效）
@@ -564,7 +576,7 @@
     sideOptions.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label || T(s.key, s.key)) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="side-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="sideCustomName" placeholder="自定义侧栏模块名">' +
-      '<select id="sideCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="skills">个人技能格式</option></select>' +
+      '<select id="sideCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="edu">教育背景格式</option><option value="project">项目经验格式</option><option value="about">个人评价格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="side-add-custom">+ 自定义模块</button></div>';
 
     html += '</div></div>';
@@ -927,10 +939,15 @@
 
   // 判断自定义模块的内部结构格式：优先读 _formats 持久化记录，回退到首条数据形状推断（兼容旧数据）
   function customFormat(key) {
-    var known = ["more", "edu", "project", "skills"];
+    var known = ["more", "edu", "project", "about", "skills"];
     var f = state.data._formats && state.data._formats[key];
     if (known.indexOf(f) >= 0) return f;
-    var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
+    var v = state.data[key];
+    // 个人评价为对象结构（非数组）
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      return (v.aboutme_desc !== undefined) ? "about" : "more";
+    }
+    var arr = Array.isArray(v) ? v : [];
     if (!arr.length) return "more";
     var it = arr[0];
     if (it && (it.school !== undefined || it.edu_time !== undefined || it.academic_degree !== undefined)) return "edu";
@@ -988,12 +1005,21 @@
     }).join("") + "</ul>";
   }
 
+  // 自定义模块「个人评价格式」渲染（与 aboutme 同版式，键参数化；对象结构 { aboutme_desc }）
+  function customAboutInner(key) {
+    var a = state.data[key] || {};
+    var txt = a.aboutme_desc || "";
+    if (!String(txt).trim()) return "";
+    return '<div class="r-about"' + bind(key + ".aboutme_desc") + ">" + ml(txt) + "</div>";
+  }
+
   // 自定义模块预览统一入口：按格式分派
   function customInnerFor(key) {
     var f = customFormat(key);
     if (f === "skills") return skillGroupInner(key, state.data[key] || []);
     if (f === "edu") return customEduInner(key);
     if (f === "project") return customProjectInner(key);
+    if (f === "about") return customAboutInner(key);
     return customInner(key);
   }
 
