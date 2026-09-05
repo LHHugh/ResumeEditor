@@ -67,7 +67,11 @@
         project_content: "1. 主导模块设计\n2. 提升系统稳定性与吞吐"
       }
     ],
-    skillList: ["JavaScript", "React", "Node.js", "Python", "MySQL"],
+    skillList: [
+      { name: "编程语言", items: ["JavaScript", "TypeScript", "Go", "Python"] },
+      { name: "前端框架 / 库", items: ["React", "Vue", "Node.js"] },
+      { name: "数据库 / 中间件", items: ["MySQL", "Redis", "Kafka"] }
+    ],
     awardList: [{ award_info: "年度优秀员工", award_time: "2022" }],
     workList: [],
     aboutme: { aboutme_desc: "🌱 3 年开发经验，专注 Web 全栈，爱好开源。" },
@@ -166,6 +170,17 @@
 
   /* ---------- 工具函数 ---------- */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  // 将技能数据统一为分组结构 [{ name, items:[...] }]，兼容旧版扁平字符串数组
+  function normSkills(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.map(function (g) {
+      if (typeof g === "string") return { name: "", items: [g] };
+      if (g && Array.isArray(g.items)) return { name: g.name || "", items: g.items.map(function (x) { return x == null ? "" : String(x); }) };
+      if (g && Array.isArray(g.skills)) return { name: g.name || "", items: g.skills.map(function (x) { return x == null ? "" : String(x); }) };
+      if (g && Array.isArray(g.skill)) return { name: g.name || "", items: g.skill.map(function (x) { return x == null ? "" : String(x); }) };
+      return { name: "", items: [] };
+    });
+  }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -225,11 +240,21 @@
   // 行内编辑：按 data-bind 路径写回数据
   function setByPath(path, value) {
     var p = path.split(".");
-    // 个人技能为字符串数组，预览行内编辑路径 skillList.<i>（2 段）或技能对象 skillList.<i>.<sub>（3 段）
-    if (p[0] === "skillList" && (p.length === 2 || p.length === 3)) {
-      var i = Number(p[1]);
-      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
-      state.data.skillList[i] = value;
+    // 分组技能路径：<key>.<gi>.items.<si> 或 <key>.<gi>.name
+    if (p[2] === "items") {
+      var sk = p[0], gj = Number(p[1]), sj = Number(p[3]);
+      var arr = state.data[sk];
+      if (!Array.isArray(arr)) state.data[sk] = [];
+      if (!arr[gj]) arr[gj] = { name: "", items: [] };
+      if (!Array.isArray(arr[gj].items)) arr[gj].items = [];
+      arr[gj].items[sj] = value;
+      return;
+    }
+    if (p.length === 3 && p[2] === "name") {
+      var nk = p[0], nj = Number(p[1]);
+      if (!Array.isArray(state.data[nk])) state.data[nk] = [];
+      if (!state.data[nk][nj]) state.data[nk][nj] = { name: "", items: [] };
+      state.data[nk][nj].name = value;
       return;
     }
     if (p.length === 2) {
@@ -290,11 +315,12 @@
     });
     return all.filter(function (k, i) { return all.indexOf(k) === i; }).map(function (k) { return { key: k }; });
   }
-  function addCustomSection(name, toSidebar) {
+  function addCustomSection(name, toSidebar, format) {
     var key = "custom_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
     state.data.titleNameMap = state.data.titleNameMap || {};
     state.data.titleNameMap[key] = name;
-    state.data[key] = [{ info: "", time: "" }];
+    // format: "skills"（个人技能格式：分组标签）或 "more"（更多信息格式：内容+时间）
+    state.data[key] = (format === "skills") ? [{ name: "", items: [] }] : [{ info: "", time: "" }];
     if (toSidebar) { if (state.sidebar.indexOf(key) < 0) state.sidebar.push(key); }
     else { if (state.sections.indexOf(key) < 0) state.sections.push(key); }
     buildEditor(); renderPreview(); save();
@@ -341,20 +367,33 @@
       '<input type="text" ' + common + ' value="' + esc(val || "") + '"></div>';
   }
 
-  function buildSkillEditor() {
-    var L = UI[state.lang];
-    var arr = Array.isArray(state.data.skillList) ? state.data.skillList : [];
-    var items = arr.map(function (s, idx) {
-      var t = (typeof s === "object") ? (s.skill || s.skill_name || "") : s;
-      return '<div class="item"><div class="item-h">技能 #' + (idx + 1) +
-        ' <button class="btn-mini danger" data-act="skill-del" data-idx="' + idx + '">删除</button></div>' +
-        '<div class="f"><label class="f-label">技能名称</label>' +
-        '<input type="text" data-skill-idx="' + idx + '" value="' + esc(t) + '"></div></div>';
+  // 分组技能编辑器（可复用于「个人技能」主模块与「个人技能格式」自定义模块）
+  function buildSkillGroupEditor(secKey, titleText) {
+    var groups = normSkills(state.data[secKey]);
+    state.data[secKey] = groups; // 就地规范化，确保后续读写结构一致
+    var isMain = (secKey === "skillList");
+    var titleInput = isMain ? "" :
+      '<div class="card-sub-edit"><label class="f-label">模块标题</label>' +
+      '<input type="text" data-sec="titleNameMap" data-field="' + secKey + '" value="' + esc(titleText) + '"></div>';
+    var groupsHtml = groups.map(function (g, gi) {
+      var itemsHtml = (g.items || []).map(function (it, si) {
+        return '<div class="item-sub"><input type="text" data-sec="' + secKey +
+          '" data-skill-group="' + gi + '" data-skill-item="' + si + '" value="' + esc(it) + '">' +
+          '<button class="btn-mini danger" data-act="skill-item-del" data-sec="' + secKey +
+          '" data-gi="' + gi + '" data-si="' + si + '">×</button></div>';
+      }).join("");
+      return '<div class="item"><div class="item-h">分组 #' + (gi + 1) +
+        ' <button class="btn-mini danger" data-act="skill-group-del" data-sec="' + secKey + '" data-gi="' + gi + '">删除分组</button></div>' +
+        '<div class="f"><label class="f-label">分组名（可留空，留空则只显示技能标签）</label>' +
+        '<input type="text" data-sec="' + secKey + '" data-skill-group="' + gi + '" data-skill-name="1" value="' + esc(g.name || "") + '"></div>' +
+        '<div class="f"><label class="f-label">技能项（可逐条增删，也可在预览中直接编辑）</label>' +
+        '<div class="item-sub-list">' + itemsHtml + '</div>' +
+        '<button class="btn-mini" data-act="skill-item-add" data-sec="' + secKey + '" data-gi="' + gi + '">+ 添加技能</button></div></div>';
     }).join("");
-    return '<div class="card"><h3 class="card-h">' + L.skillList +
-      ' <button class="btn-mini" data-act="skill-add">+ 添加技能</button></h3>' +
-      '<div class="card-sub-edit">每条技能可独立编辑、删除；也可在预览中直接编辑。</div>' +
-      items + "</div>";
+    return '<div class="card"><h3 class="card-h">' + esc(titleText) +
+      ' <button class="btn-mini" data-act="skill-group-add" data-sec="' + secKey + '">+ 添加分组</button></h3>' +
+      (isMain ? '<div class="card-sub-edit">分组与技能项均可增删改；支持在预览中直接编辑。</div>' : "") +
+      titleInput + groupsHtml + "</div>";
   }
 
   // 头像卡片：支持本地上传（自动缩放为小图）、移除、隐藏，也兼容直接粘贴图片 URL
@@ -471,6 +510,7 @@
     inactive.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="sec-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="secCustomName" placeholder="自定义模块名（如：证书/爱好）">' +
+      '<select id="secCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="sec-add-custom">+ 自定义模块</button></div>';
 
     // 侧边栏模块（仅侧边栏模板生效）
@@ -491,6 +531,7 @@
     sideOptions.forEach(function (s) { html += '<option value="' + s.key + '">' + esc(s.label || T(s.key, s.key)) + '</option>'; });
     html += '</select><button class="btn-mini" data-act="side-add">+ 添加</button></div>';
     html += '<div class="sec-add-row"><input type="text" id="sideCustomName" placeholder="自定义侧栏模块名">' +
+      '<select id="sideCustomFormat" title="模块内部结构格式"><option value="more">更多信息格式</option><option value="skills">个人技能格式</option></select>' +
       '<button class="btn-mini" data-act="side-add-custom">+ 自定义模块</button></div>';
 
     html += '</div></div>';
@@ -501,8 +542,8 @@
     var L = UI[state.lang];
     var html = buildSectionManager();
     html += buildProfileEditor();
-    // 个人技能：独立编辑器（每条技能可增删改），不在 FORM 列表中
-    if (state.sections.indexOf("skillList") >= 0) html += buildSkillEditor();
+    // 个人技能：分组编辑器（分组与技能项均可增删改），不在 FORM 列表中
+    if (state.sections.indexOf("skillList") >= 0) html += buildSkillGroupEditor("skillList", L.skillList);
     FORM.forEach(function (sec) {
       if (isMajorSection(sec.key) && state.sections.indexOf(sec.key) < 0) return;
       if (sec.key === "skillList") return; // 个人技能已在上方单独渲染
@@ -530,18 +571,29 @@
     var customKeys = state.sections.concat(state.sidebar || []).filter(function (k) {
       return typeof k === "string" && k.indexOf("custom_") === 0;
     }).filter(function (k, i, a) { return a.indexOf(k) === i; });
-    customKeys.forEach(function (key) { html += buildCustomEditor(key); });
+    customKeys.forEach(function (key) {
+      if (customFormat(key) === "skills") html += buildSkillGroupEditor(key, T(key, key));
+      else html += buildCustomEditor(key);
+    });
     document.getElementById("editor").innerHTML = html;
   }
 
   /* ---------- 编辑器事件 ---------- */
   function onEditorInput(e) {
     var t = e.target;
-    // 个人技能：单条编辑（每行为独立输入框）
-    if (t.dataset.skillIdx !== undefined && t.dataset.skillIdx !== null && t.dataset.skillIdx !== "") {
-      var si = Number(t.dataset.skillIdx);
-      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
-      state.data.skillList[si] = t.value;
+    // 分组技能：<sec>.<gi>.items.<si>（技能项）或 <sec>.<gi>.name（分组名）
+    if (t.dataset.skillGroup !== undefined && t.dataset.skillGroup !== null && t.dataset.skillGroup !== "") {
+      var sgk = t.dataset.sec;
+      var gi2 = Number(t.dataset.skillGroup);
+      if (!Array.isArray(state.data[sgk])) state.data[sgk] = [];
+      if (!state.data[sgk][gi2]) state.data[sgk][gi2] = { name: "", items: [] };
+      if (t.dataset.skillName) {
+        state.data[sgk][gi2].name = t.value;
+      } else {
+        var si2 = Number(t.dataset.skillItem);
+        if (!Array.isArray(state.data[sgk][gi2].items)) state.data[sgk][gi2].items = [];
+        state.data[sgk][gi2].items[si2] = t.value;
+      }
       afterDataChange();
       return;
     }
@@ -574,16 +626,30 @@
     if (!b) return;
     if (b.dataset.act === "add") addItem(b.dataset.sec);
     else if (b.dataset.act === "del") delItem(b.dataset.sec, Number(b.dataset.idx));
-    else if (b.dataset.act === "skill-add") {
-      if (!Array.isArray(state.data.skillList)) state.data.skillList = [];
-      state.data.skillList.push("");
+    else if (b.dataset.act === "skill-item-add") {
+      var sik = b.dataset.sec, sg = Number(b.dataset.gi);
+      if (!Array.isArray(state.data[sik])) state.data[sik] = [];
+      if (!state.data[sik][sg]) state.data[sik][sg] = { name: "", items: [] };
+      if (!Array.isArray(state.data[sik][sg].items)) state.data[sik][sg].items = [];
+      state.data[sik][sg].items.push("");
       buildEditor(); renderPreview(); save();
     }
-    else if (b.dataset.act === "skill-del") {
-      var sdi = Number(b.dataset.idx);
-      if (Array.isArray(state.data.skillList) && state.data.skillList[sdi] !== undefined) {
-        state.data.skillList.splice(sdi, 1);
+    else if (b.dataset.act === "skill-item-del") {
+      var dik = b.dataset.sec, dg = Number(b.dataset.gi), dsi = Number(b.dataset.si);
+      if (Array.isArray(state.data[dik]) && state.data[dik][dg] && Array.isArray(state.data[dik][dg].items)) {
+        state.data[dik][dg].items.splice(dsi, 1);
       }
+      buildEditor(); renderPreview(); save();
+    }
+    else if (b.dataset.act === "skill-group-add") {
+      var gak = b.dataset.sec;
+      if (!Array.isArray(state.data[gak])) state.data[gak] = [];
+      state.data[gak].push({ name: "", items: [] });
+      buildEditor(); renderPreview(); save();
+    }
+    else if (b.dataset.act === "skill-group-del") {
+      var gdk = b.dataset.sec, gd = Number(b.dataset.gi);
+      if (Array.isArray(state.data[gdk]) && state.data[gdk][gd]) state.data[gdk].splice(gd, 1);
       buildEditor(); renderPreview(); save();
     }
     else if (b.dataset.act === "sec-add") {
@@ -594,7 +660,8 @@
     else if (b.dataset.act === "sec-add-custom") {
       var nm = (document.getElementById("secCustomName").value || "").trim();
       if (!nm) { alert("请输入自定义模块名称"); return; }
-      addCustomSection(nm, false);
+      var fmt = (document.getElementById("secCustomFormat") || {}).value || "more";
+      addCustomSection(nm, false, fmt);
     }
     else if (b.dataset.act === "side-add") {
       var ssel = document.getElementById("sideAddSelect");
@@ -604,7 +671,8 @@
     else if (b.dataset.act === "side-add-custom") {
       var snm = (document.getElementById("sideCustomName").value || "").trim();
       if (!snm) { alert("请输入自定义侧栏模块名称"); return; }
-      addCustomSection(snm, true);
+      var sfmt = (document.getElementById("sideCustomFormat") || {}).value || "more";
+      addCustomSection(snm, true, sfmt);
     }
     else if (b.dataset.act === "contact-add") {
       if (!state.data.profile) state.data.profile = {};
@@ -715,16 +783,25 @@
     }).join("") + "</ul>";
   }
 
-  function skillInner() {
-    var list = state.data.skillList || [];
-    if (!list.length) return "";
-    var tags = list.map(function (s, i) {
-      var t = (typeof s === "object") ? (s.skill || s.skill_name || "") : s;
-      if (t == null || !String(t).trim()) return "";
-      return '<span class="tag"' + bind("skillList." + i) + ">" + esc(t) + "</span>";
+  // 渲染分组技能：<key> 为数据键（skillList 或自定义技能模块键），用于行内编辑绑定路径
+  function skillGroupInner(key, list) {
+    var groups = normSkills(list);
+    if (!groups.length) return "";
+    var html = groups.map(function (g, gi) {
+      var items = (g.items || []).filter(function (s) { return s != null && String(s).trim(); });
+      if (!items.length) return "";
+      var nameLbl = g.name ? '<div class="skill-g-name" ' + bind(key + "." + gi + ".name") + ">" + esc(g.name) + "</div>" : "";
+      var tags = items.map(function (s, si) {
+        return '<span class="tag"' + bind(key + "." + gi + ".items." + si) + ">" + esc(s) + "</span>";
+      }).join("");
+      return nameLbl + '<div class="tags">' + tags + "</div>";
     }).filter(Boolean).join("");
-    if (!tags) return "";
-    return '<div class="tags">' + tags + "</div>";
+    return html;
+  }
+  function skillInner() {
+    var html = skillGroupInner("skillList", state.data.skillList || []);
+    if (!html) return "";
+    return html;
   }
 
   function awardInner() {
@@ -735,6 +812,15 @@
         '<div class="r-row"><span' + bind("awardList." + i + ".award_info") + ">" + esc(a.award_info || "") + "</span>" +
         (a.award_time ? '<span class="r-time"' + bind("awardList." + i + ".award_time") + ">" + esc(a.award_time) + "</span>" : "") + "</div></li>";
     }).join("") + "</ul>";
+  }
+
+  // 判断自定义模块的内部结构格式：含 info/time 视为「更多信息」格式，否则「个人技能」分组格式
+  function customFormat(key) {
+    var arr = Array.isArray(state.data[key]) ? state.data[key] : [];
+    if (!arr.length) return "more";
+    var it = arr[0];
+    if (it && (it.info !== undefined || it.time !== undefined || it.award_info !== undefined)) return "more";
+    return "skills";
   }
 
   // 自定义模块（与「更多信息」同结构：[{ info, time }]）
@@ -780,7 +866,7 @@
         case "awardList": return awardInner();
         case "workList": return workListInner();
         case "aboutme": return aboutInner();
-        default: return customInner(key);
+        default: return customFormat(key) === "skills" ? skillGroupInner(key, state.data[key] || []) : customInner(key);
       }
     }
     function blockFor(key) {
@@ -873,6 +959,8 @@
             p.workExpYear ? { label: "工作年限", value: p.workExpYear } : null
           ].filter(Boolean);
         }
+        // 旧版扁平字符串技能数组迁移为分组结构
+        state.data.skillList = normSkills(state.data.skillList);
       }
       if (parsed.template) state.template = parsed.template;
       if (parsed.lang) state.lang = parsed.lang;
@@ -914,6 +1002,7 @@
         var obj = JSON.parse(reader.result);
         var d = clone(DEFAULT_DATA);
         Object.keys(obj).forEach(function (k) { d[k] = obj[k]; });
+        d.skillList = normSkills(d.skillList);
         state.data = d;
         state.sections = clone(DEFAULT_SECTIONS);
         state.sidebar = clone(DEFAULT_SIDEBAR);
