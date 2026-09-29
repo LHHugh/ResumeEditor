@@ -265,6 +265,17 @@ body {
   color: #fff; border-left: none; border-bottom: 1px solid rgba(255, 255, 255, .35);
   padding: 0 0 4px; margin: 18px 0 10px; font-size: 14px;
 }
+.tpl-3 .r-side .r-section,
+.tpl-3 .r-side .r-strong,
+.tpl-3 .r-side .r-dim,
+.tpl-3 .r-side .r-time,
+.tpl-3 .r-side .r-sub,
+.tpl-3 .r-side .r-desc,
+.tpl-3 .r-side .r-about,
+.tpl-3 .r-side .r-link,
+.tpl-3 .r-side .skill-g-label {
+  color: #fff;
+}
 .tpl-3 .r-side .tag { background: rgba(255, 255, 255, .2); color: #fff; }
 .tpl-3 .r-main { flex: 1; padding: 36px 34px; }
 .tpl-3 .r-main .r-sec-title {
